@@ -22,7 +22,7 @@ except (IOError, ImportError):
   long_description = ''
 
 setup(
-  name='vedavaapi_common',
+  name='vedavaapi_core',
 
   # Versions should comply with PEP440.  For a discussion on single-sourcing
   # the version across setup.py and the project code, see
