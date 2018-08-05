@@ -1,0 +1,122 @@
+{
+  "store": {
+    "db_type": "mongo",
+    "mongo_host": "mongodb://localhost/",
+    "couchdb_host": "http://sanskrit-coders:sktcouch@localhost:5984/",
+    "repositories": [
+      {
+        "repo_id": "ullekhanam",
+        "db": "vedavaapi_ullekhanam_db",
+        "db_type": "mongo",
+        "file_store": "/opt/vedavaapi/data/books/ullekhanam"
+      },
+      {
+        "repo_id": "ullekhanam_test",
+        "db": "vedavaapi_ullekhanam_test_db",
+        "db_type": "mongo",
+        "file_store": "/opt/vedavaapi/data/books/ullekhanam_test"
+      }
+    ]
+  },
+  "sling" : {
+    "scl_url" : "http://localhost/scl",
+    "scl_path" : "/home/sairamas/scl-dev/build",
+    "grammar_db" : "vedavaapi_grammardb",
+    "samvit_db" : "vedavaapi_samvitdb"
+  },
+  "ullekhanam" : {
+    "ullekhanam_dbs": [
+      {
+        "backend_id": "vedavaapi_ullekhanam_db",
+        "frontend_id": "ullekhanam",
+        "file_store": "/opt/vedavaapi/data/books/ullekhanam"
+      },
+      {
+        "backend_id": "vedavaapi_ullekhanam_test_db",
+        "frontend_id": "ullekhanam_test",
+        "file_store": "/opt/vedavaapi/data/books/ullekhanam_test"
+      },
+      {
+        "backend_id": "vedavaapi_ullekhanam_test_v2_db",
+        "frontend_id": "ullekhanam_test_v2",
+        "file_store": "/opt/vedavaapi/data/books/ullekhanam_test_v2"
+      }
+    ]
+  },
+  "users" : {
+    "users_db_name": "vedavaapi_users",
+    "oauth": {
+      "google": {
+        "comment": "Created by vishvas.vasuki at https://console.developers.google.com/apis/credentials?project=sanskritnlp",
+        "client_id": "703448017295-2rod58o21lumfs1jkhphaojkh46cooo1.apps.googleusercontent.com",
+        "client_secret": "Ns2-dcnpEb5M84hdhtRvUaC0"
+      },
+      "facebook": {
+        "client_id": "1706950096293019",
+        "client_secret": "1b2523ac7d0f4b7a73c410b2ec82586c"
+      },
+      "twitter": {
+        "client_id": "jSd7EMZFTQlxjLFG4WLmAe2OX",
+        "client_secret": "gvkh9fbbnKQXXbnqxfs8C0tCEqgNKKzoYJAWQQwtMG07UOPKAj"
+      }
+    },
+    "initial_users": [
+      {
+        "authentication_infos": [
+          {
+            "auth_provider": "google",
+            "auth_user_id": "sai.susarla@gmail.com",
+            "jsonClass": "AuthenticationInfo"
+          }
+        ],
+        "jsonClass": "User",
+        "permissions": [
+          {
+            "actions": [
+              "read",
+              "write",
+              "admin"
+            ],
+            "jsonClass": "UserPermission",
+            "service": ".*"
+          }
+        ],
+        "user_type": "human"
+      },
+      {
+        "authentication_infos": [
+          {
+            "auth_provider": "vedavaapi",
+            "auth_user_id": "vedavaapiAdmin",
+            "auth_secret_plain": "@utoDump1",
+            "jsonClass": "AuthenticationInfo"
+          }
+        ],
+        "jsonClass": "User",
+        "permissions": [
+          {
+            "actions": [
+              "read",
+              "write",
+              "admin"
+            ],
+            "jsonClass": "UserPermission",
+            "service": ".*"
+          }
+        ],
+        "user_type": "bot"
+      }
+    ],
+    "default_permissions": [
+      {
+        "actions": [
+          "read",
+          "write"
+        ],
+        "jsonClass": "UserPermission",
+        "service": "quotes"
+      }
+    ]
+  }
+}
+
