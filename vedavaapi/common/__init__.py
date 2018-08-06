@@ -45,6 +45,7 @@ def check_permission(db_name="ullekhanam"):
 
 # Base class for all Vedavaapi Service Modules exporting a RESTful API
 class VedavaapiService(object):
+    config_template = {}
     def __init__(self, name, conf={}):
         self.name = name
         self.config = conf

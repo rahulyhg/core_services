@@ -36,7 +36,7 @@ params.set_from_dict({
   'debug': False,
   'port': 9000,
   'reset': False,
-  'services' : ['store', 'users']
+  'services' : ['gservices', 'store', 'users']
 })
 
 def setup_app():
