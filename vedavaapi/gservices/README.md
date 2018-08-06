@@ -1,5 +1,17 @@
 This defines a `VedavaapiGservices` class which is subclass of `vedavaapi.common.VedavaapiService`. it's config is mapped to `gservices` key.
 
+it's config should contain fallowing keys:
+```python
+server_config = {
+    "gservices" : {
+        "google_creds_base_dir" : "/home/samskritam/vedavaapi/core_services/vedavaapi/conf_local/creds/google/",
+        "credentials_path" : "vedavaapi-credentials.json", #should be relative to google_creds_base_dir
+        "is_service_account_credentials" : 0,
+        "scopes" : ["https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/spreadsheets.readonly"]
+  }
+}
+```
+
 to enable it, we have to add `gservices` in run.py services. then object of this service will be created and will be avialable from `common.VedavaapiServices` store.
 
 where ever we need it, we just have to get it's object from VedavaapiServices, and from that access gservices.

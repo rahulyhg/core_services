@@ -18,11 +18,20 @@
       }
     ]
   },
+  "gservices" : {
+    "google_creds_base_dir" : "/home/samskritam/vedavaapi/core_services/vedavaapi/conf_local/creds/google/",
+    "credentials_path" : "vedavaapi-credentials.json",
+    "is_service_account_credentials" : 0,
+    "scopes" : ["https://www.googleapis.com/auth/drive.readonly", "https://www.googleapis.com/auth/spreadsheets.readonly"]
+  },
   "sling" : {
     "scl_url" : "http://localhost/scl",
     "scl_path" : "/home/sairamas/scl-dev/build",
     "grammar_db" : "vedavaapi_grammardb",
-    "samvit_db" : "vedavaapi_samvitdb"
+    "samvit_db" : "vedavaapi_samvitdb",
+    "sandhi_gsheet_id" : "1yP82Y5d5mGrvNV2e-OPc6rBhPEtTYWI2vEwYN7uZdnU",
+    "varna_sandhi_rules_sheet_title" : "varna_sandhi_rules",
+    "macros_sheet_title" : "Macros"
   },
   "ullekhanam" : {
     "ullekhanam_dbs": [
