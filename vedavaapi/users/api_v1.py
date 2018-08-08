@@ -7,8 +7,8 @@ from flask import request, Blueprint, session, Response
 from jsonschema import ValidationError
 from sanskrit_data.schema.common import JsonObject
 from sanskrit_data.schema.users import User, AuthenticationInfo
+from . import myservice, get_db
 
-from vedavaapi.users import get_db, get_service
 from vedavaapi.users.oauth import OAuthSignIn
 
 logging.basicConfig(

@@ -10,19 +10,18 @@ This is the main entry point. It does the following
 # This web app may be run in two modes. See bottom of the file.
 
 import getopt
-# from flask.ext.cors import CORS
 import logging
-import os.path
+from os.path import dirname, join
 import sys
 
 from sanskrit_data.schema.common import JsonObject
 
-# Add parent directory to PYTHONPATH, so that vedavaapi_py_api module can be found.
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+# Add parent directory to PYTHONPATH, so that vedavaapi module can be found.
+sys.path.append(join(dirname(__file__), ".."))
 
-from vedavaapi import common
+import common
 from sanskrit_data import file_helper
-from vedavaapi.common.flask_helper import app
+from common.flask_helper import app
 
 logging.basicConfig(
   level=logging.INFO,
@@ -32,7 +31,7 @@ logging.basicConfig(
 params = JsonObject()
 
 params.set_from_dict({
-  'config_file' : os.path.join(os.path.dirname(__file__), 'conf_local/server_config.json'), 
+  'config_file' : join("/opt/vedavaapi", 'conf_local/server_config.json'), 
   'debug': False,
   'port': 9000,
   'reset': False,

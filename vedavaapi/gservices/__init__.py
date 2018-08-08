@@ -1,16 +1,27 @@
 import os.path
 
-from vedavaapi.common import VedavaapiService, VedavaapiServices
+from vedavaapi.common import VedavaapiService
 
 from vedavaapi.google_helper.oauth import creds_helper
 import vedavaapi.google_helper.gsheets.helper as gsheets_helper
 import vedavaapi.google_helper.gdrive.helper as gdrive_helper
 
+ServiceObj = None
+
 class VedavaapiGservices(VedavaapiService):
+    config_template = {
+      "google_creds_base_dir" : "/home/samskritam/vedavaapi/core_services/vedavaapi/conf_local/creds/google/",
+      "credentials_path" : "vedavaapi-credentials.json",
+      "is_service_account_credentials" : 0,
+      "scopes" : [
+        "https://www.googleapis.com/auth/drive.readonly", 
+        "https://www.googleapis.com/auth/spreadsheets.readonly"]
+    }
 
-    def __init__(self, name, conf):
-        super(VedavaapiGservices, self).__init__(name,conf)
-
+    def __init__(self, registry, name, conf):
+        super(VedavaapiGservices, self).__init__(registry, name, conf)
+        global ServiceObj
+        ServiceObj = self
 
     def services(self, vedavaapi_service_name=None):
         """
@@ -21,7 +32,7 @@ class VedavaapiGservices(VedavaapiService):
         :param vedavaapi_service_name: name of vedavaapi service. if it is not provided, the by default global config will be used.
         """
         effective_conf = self.config.copy()
-        callee_vedavaapi_service = VedavaapiServices.lookup(vedavaapi_service_name)
+        callee_vedavaapi_service = self.registry.lookup(vedavaapi_service_name)
 
         if callee_vedavaapi_service is not None:
             callee_config = callee_vedavaapi_service.config
@@ -33,20 +44,22 @@ class VedavaapiGservices(VedavaapiService):
         scopes = effective_conf['scopes']
         auth_through_service_account = bool(effective_conf['is_service_account_credentials'])
 
-        return GServices(credentials_path, scopes=scopes, auth_through_service_acoount=auth_through_service_account)
+        return GServices(credentials_path, scopes=scopes, auth_through_service_account=auth_through_service_account)
 
+def myservice():
+    return ServiceObj
 
 class GServices(object):
 
-    def __init__(self, credentilas_path, scopes, auth_through_service_acoount=False):
+    def __init__(self, credentials_path, scopes, auth_through_service_account=False):
         '''
 
-        :param credentilas_path: path to credentials file
+        :param credentials_path: path to credentials file
         :param scopes: scopes to be enabled
-        :param auth_through_service_acoount: are credentials are of service_account?
+        :param auth_through_service_account: are credentials are of service_account?
         '''
         self.__services = {}
-        self.__credentials = creds_helper.credentials_from_file(credentilas_path, scopes, auth_through_service_account=auth_through_service_acoount)
+        self.__credentials = creds_helper.credentials_from_file(credentials_path, scopes, auth_through_service_account=auth_through_service_account)
 
 
     def __init_gdrive(self, force=False, **kwargs):
@@ -88,6 +101,3 @@ class GServices(object):
     def gsheets(self, refresh=False, enable_drive_service_linking=False, **kwargs):
         self.__init_gsheets(force=refresh, enable_drive_service_linking=enable_drive_service_linking, **kwargs)
         return self.__services['sheets']
-
-
-

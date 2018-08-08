@@ -12,20 +12,6 @@ logging.basicConfig(
   format="%(levelname)s: %(asctime)s {%(filename)s:%(lineno)d}: %(message)s "
 )
 
-"""Stores the server configuration."""
-server_config = None
-
-
-def set_configuration(config_file_name):
-  """
-  Reads the server configuration from the specified file, and stores it in the server_config module variable.
-  :param config_file_name:
-  :return:
-  """
-  global server_config
-  with open(config_file_name) as fhandle:
-    server_config = json.loads(fhandle.read())
-
 def get_user():
   from flask import session
   from sanskrit_data.schema.common import JsonObject
@@ -46,7 +32,8 @@ def check_permission(db_name="ullekhanam"):
 # Base class for all Vedavaapi Service Modules exporting a RESTful API
 class VedavaapiService(object):
     config_template = {}
-    def __init__(self, name, conf={}):
+    def __init__(self, registry, name, conf={}):
+        self.registry = registry
         self.name = name
         self.config = conf
 
@@ -77,6 +64,17 @@ class VedavaapiService(object):
 # Registry for all Vedavaapi API-based Service Modules
 class VedavaapiServices:
     all_services = {}
+    server_config = None
+
+    @classmethod
+    def set_config(cls, config_file_name):
+        """
+        Reads the server configuration from the specified file, and stores it in the server_config module variable.
+        :param config_file_name:
+        :return:
+        """
+        with open(config_file_name) as fhandle:
+            cls.server_config = json.loads(fhandle.read())
 
     @classmethod
     def register(cls, svcname, service):
@@ -84,29 +82,32 @@ class VedavaapiServices:
 
     @classmethod
     def lookup(cls, svcname):
+        print "In lookup({}): {}".format(svcname, cls.all_services)
         return cls.all_services[svcname] if svcname in cls.all_services else None
 
-def start_service(name, reset=False):
-    logging.info("Starting vedavaapi.{} service ...".format(name))
-    svc_cls = "Vedavaapi" + str.capitalize(name)
-    _tmp = __import__('vedavaapi.{}'.format(name), globals(), locals(), [svc_cls])
-    svc_cls = eval('_tmp.'+svc_cls)
-    svc_conf = server_config[name] if name in server_config else {}
-    svc_obj = svc_cls(name, svc_conf)
-    VedavaapiServices.register(name, svc_obj)
+    @classmethod
+    def start(cls, svcname, reset=False):
+        logging.info("Starting vedavaapi.{} service ...".format(svcname))
+        svc_cls = "Vedavaapi" + str.capitalize(svcname)
+        _tmp = __import__('vedavaapi.{}'.format(svcname), globals(), locals(), [svc_cls])
+        svc_cls = eval('_tmp.'+svc_cls)
+        svc_conf = cls.server_config[svcname] if svcname in cls.server_config else {}
+        svc_obj = svc_cls(cls, svcname, svc_conf)
+        cls.register(svcname, svc_obj)
 
-    if reset:
-        logging.info("Resetting previous state of {} ...".format(name))
-        svc_obj.reset()
-    svc_obj.setup()
-    svc_obj.register_api(app, "/{}".format(name))
+        if reset:
+            logging.info("Resetting previous state of {} ...".format(svcname))
+            svc_obj.reset()
+            cls.lookup("store")
+        svc_obj.setup()
+        svc_obj.register_api(app, "/{}".format(svcname))
 
 def start_app(config_file, services, reset=False):
     if not services:
         return
 
-    set_configuration(config_file_name=config_file)
+    VedavaapiServices.set_config(config_file_name=config_file)
 
     logging.info("Root path: " + app.root_path)
     for svc in services:
-        start_service(svc, reset)
+        VedavaapiServices.start(svc, reset)

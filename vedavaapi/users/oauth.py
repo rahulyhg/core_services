@@ -2,7 +2,7 @@ import logging
 
 from flask import url_for, session
 from flask_oauthlib.client import OAuth
-from vedavaapi.users import get_db, get_service, get_default_permissions
+from . import get_db, myservice, get_default_permissions
 
 logging.basicConfig(
   level=logging.DEBUG,
