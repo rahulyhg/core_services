@@ -94,7 +94,7 @@ class VedavaapiUsers(VedavaapiService):
         self.vvstore = registry.lookup("store")
         global ServiceObj
         ServiceObj = self
-        print "users obj is ", ServiceObj
+        print ("users obj is ", ServiceObj)
 
     def reset(self):
         logging.info("Deleting database/collection " + self.config["users_db_name"])

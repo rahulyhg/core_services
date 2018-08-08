@@ -32,12 +32,12 @@ vakyas_sheet_values, statuscode = gsheets.sheet_values_for(spreadsheet_id='someG
 ```
 
 in some cases, if any VedavaapiService needed seperate credentials, due to their destructive writable scopes enabled, then -
-just pass that service name to .services() call like below. then VedavaapiGservices will retrieve configuration from the callee service, and uses it as credentials config, instead of it's default config. it is incremental. i.e. if any of required detail about credentials config, not provided in that service's custom config, then for that argument, it will fallback on default config. thus only extra/custom attributes need to be overrided. fallowing is example using additional options.
+just pass that specialized config to .services() call like below. then VedavaapiGservices will use that configuration, instead of it's default config. it is incremental. i.e. if any of required detail about credentials config, not provided in that custom config, then for that argument, it will fallback on default config. thus only extra/custom attributes need to be overrided. fallowing is example using additional options.
 
 ```python
 from vedavaapi.common import VedavaapiServices
 
-gservices = VedavaapiServices.lookup("gservices").services(vedavaapi_service_name="sling") #it is our services factory customised for sling.(if any options overrided in it's config)
+gservices = VedavaapiServices.lookup("gservices").services(custom_config_dict) #it is our services factory customised for our custom_config.
 
 gdrive = gservices.gdrive(force=True, expose_backend_errors=False) #force=True will force recreate gdrive helper, even if it exists prior. it may be needed in some rare cases
 '''

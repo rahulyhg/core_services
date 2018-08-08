@@ -4,8 +4,7 @@ Some common utilities.
 
 import json
 import logging
-from flask import Blueprint, request
-from .flask_helper import app
+from flask import request
 
 logging.basicConfig(
   level=logging.INFO,
@@ -32,6 +31,13 @@ def check_permission(db_name="ullekhanam"):
 # Base class for all Vedavaapi Service Modules exporting a RESTful API
 class VedavaapiService(object):
     config_template = {}
+    '''
+    explicit declaration of services whom this service uses(depends upon).
+    when starting this service, we can start it's dependency services first.
+    otherwise it will be problem, if services initialized in wrong order, and one service accessed dependency in it's initiation
+    '''
+    dependency_services = []
+
     def __init__(self, registry, name, conf={}):
         self.registry = registry
         self.name = name
@@ -82,32 +88,6 @@ class VedavaapiServices:
 
     @classmethod
     def lookup(cls, svcname):
-        print "In lookup({}): {}".format(svcname, cls.all_services)
+        print ("In lookup({}): {}".format(svcname, cls.all_services))
         return cls.all_services[svcname] if svcname in cls.all_services else None
 
-    @classmethod
-    def start(cls, svcname, reset=False):
-        logging.info("Starting vedavaapi.{} service ...".format(svcname))
-        svc_cls = "Vedavaapi" + str.capitalize(svcname)
-        _tmp = __import__('vedavaapi.{}'.format(svcname), globals(), locals(), [svc_cls])
-        svc_cls = eval('_tmp.'+svc_cls)
-        svc_conf = cls.server_config[svcname] if svcname in cls.server_config else {}
-        svc_obj = svc_cls(cls, svcname, svc_conf)
-        cls.register(svcname, svc_obj)
-
-        if reset:
-            logging.info("Resetting previous state of {} ...".format(svcname))
-            svc_obj.reset()
-            cls.lookup("store")
-        svc_obj.setup()
-        svc_obj.register_api(app, "/{}".format(svcname))
-
-def start_app(config_file, services, reset=False):
-    if not services:
-        return
-
-    VedavaapiServices.set_config(config_file_name=config_file)
-
-    logging.info("Root path: " + app.root_path)
-    for svc in services:
-        VedavaapiServices.start(svc, reset)
