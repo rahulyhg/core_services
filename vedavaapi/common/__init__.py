@@ -91,3 +91,30 @@ class VedavaapiServices:
         print ("In lookup({}): {}".format(svcname, cls.all_services))
         return cls.all_services[svcname] if svcname in cls.all_services else None
 
+    @classmethod
+    def start(cls, app, svcname, reset=False):
+        logging.info("Starting vedavaapi.{} service ...".format(svcname))
+        svc_cls = "Vedavaapi" + str.capitalize(svcname)
+        _tmp = __import__('vedavaapi.{}'.format(svcname), globals(), locals(), [svc_cls])
+        svc_cls = eval('_tmp.' + svc_cls)
+        svc_conf = cls.server_config[svcname] if svcname in cls.server_config else {}
+        svc_obj = svc_cls(cls, svcname, svc_conf)
+        cls.register(svcname, svc_obj)
+
+        if reset:
+            logging.info("Resetting previous state of {} ...".format(svcname))
+            svc_obj.reset()
+            cls.lookup("store")
+        svc_obj.setup()
+        svc_obj.register_api(app, "/{}".format(svcname))
+
+
+def start_app(app, config_file, services, reset=False):
+    if not services:
+        return
+
+    VedavaapiServices.set_config(config_file_name=config_file)
+
+    logging.info("Root path: " + app.root_path)
+    for svc in services:
+        VedavaapiServices.start(app, svc, reset)
