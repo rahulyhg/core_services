@@ -49,4 +49,26 @@ details, code = gsheets.spreadsheet_details_for('1yP82Y5d5mGrvNV2e-OPc6rBhPEtTYW
 vakyas_sheet_values, statuscode = gsheets.sheet_values_for(spreadsheet_id='someGooGleSheetId',sheet_id='Vakyas', pargs={'idType':'title', 'valuesFormat':'maps', 'fields':['Vakya_id', 'Tantrayukti_tag', 'Vakya'], 'range':'1:27'} )
 
 ```
+####Api
+this package also provides api blueprint for gproxy api. It acts as a proxy to google apis. It authorises on behalf of callees with default credentials and returns what ever result it get to callee.
+It not just give some helper url endpoints, but also is 'true proxy'. i.e we can use every readonly feature of google apis instead of just some convinient features. each namespace provides a `/raw/<path: path>` endpoint, where path can be any valid path of corresponding google api. this api then gets token from refresh token in credentials, and then signs http request with token authorisation info, and sends request to googleapis. then passes on results directly in response. example urls are like below.
 
+```html
+https://sheets.googleapis.com/v4/spreadsheets/1CxowriO8-FIbV4ux5UBoNawdY4O1S6lTe-U6BAnc1Wo/values:batchGet?ranges=Concept-sum!A1:D5&ranges=Sambandhas!A1:D5&majorDimension=COLUMNS
+
+above google sheets api url which requests some batch ranges values in a spreadsheet using A1 notation will translates to following in gproxy api.(assuming app running on 127.0.0.1:5000)
+
+http://127.0.0.1:5000/gproxy/gsheets/raw/1CxowriO8-FIbV4ux5UBoNawdY4O1S6lTe-U6BAnc1Wo/values:batchGet?ranges=Concept-sum!A1:D5&ranges=Sambandhas!A1:D5&majorDimension=COLUMNS
+
+i.e prefix https://sheets.googleapis.com/v4/spreadsheets/ will be replaced with http://127.0.0.1:5000/gproxy/gsheets/raw/
+
+
+same thing can be done with gdrive endpoint.
+```
+
+along with proxy /raw/ endpoint, each namespace (like gsheets) supports their own helper endpoints. like following
+
+```html
+http://127.0.0.1:5000/gproxy/gsheets/1CxowriO8-FIbV4ux5UBoNawdY4O1S6lTe-U6BAnc1Wo/Concept-sum?idType=title
+is to get Concept-sum sheets's values, with headers resolved, values mapped, and comments considered, and other required optimisations.
+```
