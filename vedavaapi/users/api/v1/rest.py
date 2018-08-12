@@ -3,30 +3,19 @@ import logging
 import flask_restplus
 from furl import furl
 import sanskrit_data.schema.common as common_data_containers
-from flask import request, Blueprint, session, Response
+from flask import request, session, Response
 from jsonschema import ValidationError
 from sanskrit_data.schema.common import JsonObject
 from sanskrit_data.schema.users import User, AuthenticationInfo
-from . import myservice, get_db
+from ... import myservice, get_db
 
-from vedavaapi.users.oauth import OAuthSignIn
+from .oauth import OAuthSignIn
+from ..v1 import api
 
 logging.basicConfig(
   level=logging.INFO,
   format="%(levelname)s: %(asctime)s {%(filename)s:%(lineno)d}: %(message)s "
 )
-
-
-URL_PREFIX = '/v1'
-api_blueprint = Blueprint(name='auth', import_name=__name__)
-
-api = flask_restplus.Api(app=api_blueprint, version='1.0', title='vedavaapi py users API',
-                         description='For detailed intro and to report issues: see <a href="https://github.com/vedavaapi/vedavaapi_py_api">here</a>. '
-                                     'For a list of JSON schema-s this API uses (referred to by name in docs) see <a href="v1/schemas"> here</a>. <BR>'
-                                     'Please also see the <a href="http://sanskrit-data.readthedocs.io/en/latest/sanskrit_data_schema.html#class-diagram" > class diagram </a> as well as the sources ( <a href="http://sanskrit-data.readthedocs.io/en/latest/_modules/sanskrit_data/schema/books.html#BookPortion">example</a> ) - It might help you understand the schema more easily.<BR>'
-                                     'A list of REST and non-REST API routes avalilable on this server: <a href="../sitemap">sitemap</a>.',
-                         default_label=api_blueprint.name,
-                         prefix=URL_PREFIX, doc='/docs')
 
 def is_user_admin():
   user = JsonObject.make_from_dict(session.get('user', None))
@@ -337,6 +326,9 @@ class PasswordLogin(flask_restplus.Resource):
     Passwords are convenient for authenticating bots.
     For human debugging - just use Google oauth login as an admin (but ensure that url is localhost, not a bare ip address).
     """
+    logging.info('(raw) request.get_data(): ' + request.get_data().decode(encoding='utf-8'))
+    logging.info('request.form: ' + str(request.form))
+    logging.info('request.values: ' + str(request.values))
     user_id = request.form.get('user_id')
     user_secret = request.form.get('user_secret')
     user = get_db().get_user_from_auth_info(auth_info=AuthenticationInfo.from_details(auth_user_id=user_id,
@@ -390,4 +382,3 @@ class SchemaListHandler(flask_restplus.Resource):
     schemas.update(common.get_schemas(users))
     return schemas, 200
 
-__all__ = ["api_blueprint"]

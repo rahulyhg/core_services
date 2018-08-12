@@ -89,12 +89,13 @@ class VedavaapiUsers(VedavaapiService):
       ]
     }
 
+    dependency_services = ['store']
+
     def __init__(self, registry, name, conf):
         super(VedavaapiUsers, self).__init__(registry, name, conf)
         self.vvstore = registry.lookup("store")
-        global ServiceObj
-        ServiceObj = self
-        print ("users obj is ", ServiceObj)
+        import_blueprints_after_service_is_ready(self)
+
 
     def reset(self):
         logging.info("Deleting database/collection " + self.config["users_db_name"])
@@ -137,6 +138,11 @@ def get_db():
 def get_default_permissions():
     return myservice().default_permissions
 
-from .api_v1 import api_blueprint as apiv1_blueprint
+api_blueprints = []
 
-api_blueprints = [apiv1_blueprint]
+def import_blueprints_after_service_is_ready(service_obj):
+    global ServiceObj
+    ServiceObj = service_obj
+    from .api import apiv1_blueprint, apiv2_blueprint
+    api_blueprints.extend((apiv1_blueprint, apiv2_blueprint))
+

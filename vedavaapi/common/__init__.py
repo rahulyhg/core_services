@@ -97,6 +97,13 @@ class VedavaapiServices:
         svc_cls = "Vedavaapi" + str.capitalize(svcname)
         _tmp = __import__('vedavaapi.{}'.format(svcname), globals(), locals(), [svc_cls])
         svc_cls = eval('_tmp.' + svc_cls)
+
+        try:
+            for dep in svc_cls.dependency_services:
+                cls.start(app, dep, reset=reset)
+        except Exception as e:
+            pass
+
         svc_conf = cls.server_config[svcname] if svcname in cls.server_config else {}
         svc_obj = svc_cls(cls, svcname, svc_conf)
         cls.register(svcname, svc_obj)
