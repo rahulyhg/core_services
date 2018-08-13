@@ -192,9 +192,14 @@ class FacebookClient(OAuthClient):
         return atr['access_token'] if 'access_token' in atr else None
 
     def get_user_info(self, access_token_response):
-
+        import hashlib, hmac, base64
+        dig = hmac.new(self.me['client_secret'].encode('utf-8'),
+                       msg=access_token_response['access_token'].encode('utf-8'), digestmod=hashlib.sha256)
+        appsecret_proof = dig.hexdigest()
         request_params = {
-            'access_token' : access_token_response['access_token']
+            'access_token': access_token_response['access_token'],
+            'appsecret_proof': appsecret_proof,
+            'fields': ','.join(['email', 'name', 'id', 'picture'])
         }
 
         response = requests.get(self.userinfo_api_endpoint, params=request_params)
