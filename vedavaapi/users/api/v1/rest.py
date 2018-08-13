@@ -1,21 +1,81 @@
 import logging
 
-import flask_restplus
+import flask_restplus, flask
+from flask import session, request, Response
 from furl import furl
-import sanskrit_data.schema.common as common_data_containers
-from flask import request, session, Response
 from jsonschema import ValidationError
 from sanskrit_data.schema.common import JsonObject
-from sanskrit_data.schema.users import User, AuthenticationInfo
-from ... import myservice, get_db
+import sanskrit_data.schema.common as common_data_containers
+from sanskrit_data.schema.users import AuthenticationInfo, User
 
-from .oauth import OAuthSignIn
 from ..v1 import api
+from .oauth import OAuthClient, GoogleClient
+from ... import get_db, get_default_permissions, myservice
 
-logging.basicConfig(
-  level=logging.INFO,
-  format="%(levelname)s: %(asctime)s {%(filename)s:%(lineno)d}: %(message)s "
-)
+
+def redirect_js(next_url):
+  return 'Continue on to <a href="%(url)s">%(url)s</a>. <script>window.location = "%(url)s";</script>' % {"url": next_url}
+
+@api.route('/oauth_login/<string:provider_name>')
+class OauthLogin(flask_restplus.Resource):
+    get_parser = api.parser()
+    get_parser.add_argument('next_url', type=str, location='args')
+
+    @api.expect(get_parser, validate=True)
+    def get(self, provider_name):
+        provider = OAuthClient.get_provider(provider_name)
+        return provider.redirect_for_authorization(next_url=flask.request.args.get('next_url'))
+
+
+@api.route('/oauth_authorized/<string:provider_name>')
+class OauthAuthorized(flask_restplus.Resource):
+    get_parser = api.parser()
+    get_parser.add_argument('state', type=str, location='args')
+
+    @api.expect(get_parser, validate=True)
+    @api.doc(responses={
+        200: 'Login success.',
+        401: 'Unauthorized.',
+    })
+    def get(self, provider_name):
+        provider = OAuthClient.get_provider(provider_name)
+        auth_code = provider.extract_auth_code()
+        access_token_response = provider.exchange_code_for_access_token(auth_code)
+        userinfo, response_code = provider.get_user_info(access_token_response=access_token_response)
+        if 'error' in userinfo:
+            #TODO should return/redirect to a custom error page instead.
+            return {'error' : 'error in authenticating'}, 401
+
+        #provider agnostic key value format with data extracted.
+        userinfo_standard = provider.user_info_in_standard_format(userinfo)
+
+        session['oauth_token'] = provider.extract_access_token_from_response(access_token_response)
+        session['user'] = get_user(userinfo_standard, provider.name).to_json_map()
+
+        next_url = request.args.get('state')
+        if next_url is not None:
+            next_url_final = furl(next_url)
+            next_url_final.args["response_code"] = response_code
+            from flask import Response
+            return Response(redirect_js(next_url_final))
+        else:
+            return {"message": "Did not get a next_url, it seems!"}, response_code
+
+
+
+def get_user(userinfo, provider_name):
+    user = get_db().get_user_from_auth_info(
+        AuthenticationInfo.from_details(auth_user_id=userinfo['email'], auth_provider=provider_name)
+    )
+    print(user)
+    if user is None:
+        user = User.from_details(
+            auth_infos=[AuthenticationInfo.from_details(auth_user_id=userinfo['email'], auth_provider=provider_name)],
+            user_type='human',
+            permissions=get_default_permissions()
+        )
+    return user
+
 
 def is_user_admin():
   user = JsonObject.make_from_dict(session.get('user', None))
@@ -26,10 +86,6 @@ def is_user_admin():
     return False
   else:
     return True
-
-
-def redirect_js(next_url):
-  return 'Continue on to <a href="%(url)s">%(url)s</a>. <script>window.location = "%(url)s";</script>' % {"url": next_url}
 
 
 @api.route('/current_user')
@@ -113,7 +169,6 @@ class UserListHandler(flask_restplus.Resource):
       }
       return message, 417
     return user.to_json_map(), 200
-
 
 @api.route('/users/<string:id>')
 @api.param('id', 'Hint: Get one from the JSON object returned by another GET call. ')
@@ -224,89 +279,6 @@ class UserHandler(flask_restplus.Resource):
       return {"message": "Unauthorized!"}, 401
     matching_user.delete_in_collection(db_interface=get_db())
     return {}, 200
-
-
-@api.route('/oauth_login/<string:provider>')
-class OauthLogin(flask_restplus.Resource):
-  get_parser = api.parser()
-  get_parser.add_argument('next_url', type=str, location='args')
-
-  @api.expect(get_parser, validate=True)
-  def get(self, provider):
-    """ Kick-off the oauth process. Will redirect to the oauth provider website first.
-
-    To try this out, try <a href="v1/oauth_login/google" target="new">google oauth in a new tab</a>"""
-    oauth = OAuthSignIn.get_provider(provider)
-    return oauth.authorize(next_url=request.args.get('next_url'))
-
-
-@api.route('/oauth_authorized/<string:provider>')
-class OauthAuthorized(flask_restplus.Resource):
-  get_parser = api.parser()
-  get_parser.add_argument('state', type=str, location='args')
-
-  @api.expect(get_parser, validate=True)
-  @api.doc(responses={
-    200: 'Login success.',
-    401: 'Unauthorized.',
-  })
-  def get(self, provider):
-    """The user's browser is redirected to this address after successfully validating with the oauth provider by calling oauth_login.
-
-    Here, the users oauth details are saved and access permissions are determined. The user is directed to next_url initially supplied with oauth_login, along with a code indicating login success.
-
-    Note that we're not returning user details considering the possibility of malicious websites supplied as next_url parameters. Should user details/ permissions be necessary, we should have a separate api - currently /users should work without ambiguity for non-admins.
-    """
-    oauth = OAuthSignIn.get_provider(provider)
-    response = None
-    from flask_oauthlib.client import OAuthException
-    try:
-      response = oauth.authorized_response()
-      # Example response: {
-      #   'expires_in': 3600,
-      #   'id_token': 'AsxTQ6wA3xM006J1pGyWd4lmcwowV9nNI1w6SNeP1Qxu1YJ69_w',
-      #   'token_type': 'Bearer',
-      #   'access_token': '-DlJU'}
-    except OAuthException as e:
-      import traceback
-      logging.warning(traceback.format_exc())
-      logging.warning(e.type)
-      logging.warning(e.message)
-      logging.warning(e.data)
-      if e.data['error_description'] == 'Code was already redeemed.':
-        logging.warning(
-          "For some strange reason, the browser requested this url for a second time. Could be just the user, but investigate.")
-      else:
-        response = {"exceptionData": e.data}, 401
-        return response
-
-    response_code = 200
-    if response is None:
-      # flash('Couldn\'t authenticate you with ' + provider)
-      response_code = 401
-    else:
-      session['oauth_token'] = oauth.get_session_data(response)
-      session['user'] = oauth.get_user().to_json_map()
-      logging.debug(session)
-      # flash('Authenticated!')
-
-    # logging.debug(request.args)
-    # Example request.args: {'code': '4/BukA679ASNPe5xvrbq_2aJXD_OKxjQ5BpCnAsCqX_Io', 'state': 'http://localhost:63342/vedavaapi/ullekhanam-ui/docs/v0/html/viewbook.html?_id=59adf4eed63f84441023762d'}
-    next_url = request.args.get('state')
-    if next_url is not None:
-      next_url_final = furl(next_url)
-      next_url_final.args["response_code"] = response_code
-      from flask import Response
-
-      # oauth_authorized should redirect to next_url initially supplied with oauth_login - but cross domain redirects are a problem we don't want to have. For example: Attempting to redirect to file:///home/vvasuki/ullekhanam-ui/docs/v0/html/viewbook.html?_id=59adf4eed63f84441023762d failed with "unsafe redirect." So, Not using redirect(next_url).
-      # Instead, return some redirecting javascript.
-      #
-      # Sets mimetype to text/html
-      return Response(redirect_js(next_url_final))
-      # return redirect(next_url)
-    else:
-      return {"message": "Did not get a next_url, it seems!"}, response_code
-
 
 @api.route('/password_login')
 class PasswordLogin(flask_restplus.Resource):

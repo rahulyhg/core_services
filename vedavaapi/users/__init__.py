@@ -143,6 +143,6 @@ api_blueprints = []
 def import_blueprints_after_service_is_ready(service_obj):
     global ServiceObj
     ServiceObj = service_obj
-    from .api import apiv1_blueprint, apiv2_blueprint
-    api_blueprints.extend((apiv1_blueprint, apiv2_blueprint))
+    from .api import apiv0_blueprint, apiv1_blueprint
+    api_blueprints.extend((apiv1_blueprint, apiv0_blueprint))
 

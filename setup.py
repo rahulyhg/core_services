@@ -82,7 +82,7 @@ setup(
   # https://packaging.python.org/en/latest/requirements.html
   install_requires=[
     'flask', 'flask-cors', 'furl', 'flask-restplus', 'flask-oauthlib',
-    'google-services-helper>=1.0.2', 'sanskrit_data',
+    'google-services-helper>=1.0.3', 'sanskrit_data',
     'jsonpickle', 'jinja2', 'Pillow', 'werkzeug', 'jsonschema',
   ],
   # For manual installation, the same list:

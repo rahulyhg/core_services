@@ -1,3 +1,4 @@
+#-*-encoding:utf-8-*-
 """
 Some common utilities.
 """
@@ -79,8 +80,9 @@ class VedavaapiServices:
         :param config_file_name:
         :return:
         """
-        with open(config_file_name) as fhandle:
-            cls.server_config = json.loads(fhandle.read())
+        with open(config_file_name, 'rb') as fhandle:
+            cls.server_config = json.loads(fhandle.read().decode('utf-8'))
+            print(cls.server_config)
 
     @classmethod
     def register(cls, svcname, service):
