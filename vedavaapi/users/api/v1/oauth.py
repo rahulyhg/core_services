@@ -16,8 +16,8 @@ logging.basicConfig(
 from sanskrit_data.schema.users import User, UserPermission, AuthenticationInfo
 
 class OAuthClient(object):
-    provider_classes = {}
-    provider_objects = {}
+    oauth_client_classes = {}
+    oauth_client_objects = {}
 
     def __init__(self, name):
         self.name = name
@@ -46,21 +46,24 @@ class OAuthClient(object):
 
     @classmethod
     def register_provider_class(cls, provider_name, provider_class):
-        cls.provider_classes[provider_name] = provider_class
+        cls.oauth_client_classes[provider_name] = provider_class
 
     @classmethod
-    def get_provider(cls, provider_name, refresh=False):
-        if provider_name in cls.provider_objects:
+    def get_client_for_provider(cls, provider_name, refresh=False):
+        if provider_name in cls.oauth_client_objects:
             if not refresh:
-                return cls.provider_objects[provider_name]
+                return cls.oauth_client_objects[provider_name]
 
         oauth_config = myservice().config['oauth']
-        provider_specific_config = oauth_config[provider_name]
+        provider_specific_config = oauth_config.get(provider_name)
 
-        provider_class = cls.provider_classes[provider_name]
-        cls.provider_objects[provider_name] = provider_class(config=provider_specific_config)
+        provider_class = cls.oauth_client_classes.get(provider_name)
+        if not (provider_class and provider_specific_config):
+            return None
 
-        return cls.provider_objects[provider_name]
+        cls.oauth_client_objects[provider_name] = provider_class(config=provider_specific_config)
+
+        return cls.oauth_client_objects[provider_name]
 
 
 

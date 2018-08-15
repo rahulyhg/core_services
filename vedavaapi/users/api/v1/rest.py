@@ -23,8 +23,10 @@ class OauthLogin(flask_restplus.Resource):
 
     @api.expect(get_parser, validate=True)
     def get(self, provider_name):
-        provider = OAuthClient.get_provider(provider_name)
-        return provider.redirect_for_authorization(next_url=flask.request.args.get('next_url'))
+        client = OAuthClient.get_client_for_provider(provider_name)
+        if not client:
+            return {'error' : {'message' : 'currently oauth provider with name "{provider_name}" not supported.'.format(provider_name=provider_name)}}, 400
+        return client.redirect_for_authorization(next_url=flask.request.args.get('next_url'))
 
 
 @api.route('/oauth_authorized/<string:provider_name>')
@@ -38,19 +40,21 @@ class OauthAuthorized(flask_restplus.Resource):
         401: 'Unauthorized.',
     })
     def get(self, provider_name):
-        provider = OAuthClient.get_provider(provider_name)
-        auth_code = provider.extract_auth_code()
-        access_token_response = provider.exchange_code_for_access_token(auth_code)
-        userinfo, response_code = provider.get_user_info(access_token_response=access_token_response)
+        client = OAuthClient.get_client_for_provider(provider_name)
+        if not client:
+            return {'error' : {'message' : 'currently oauth provider with name "{provider_name}" not supported.'.format(provider_name=provider_name)}}, 400
+        auth_code = client.extract_auth_code()
+        access_token_response = client.exchange_code_for_access_token(auth_code)
+        userinfo, response_code = client.get_user_info(access_token_response=access_token_response)
         if 'error' in userinfo:
             #TODO should return/redirect to a custom error page instead.
             return {'error' : 'error in authenticating'}, 401
 
         #provider agnostic key value format with data extracted.
-        userinfo_standard = provider.user_info_in_standard_format(userinfo)
+        userinfo_standard = client.user_info_in_standard_format(userinfo)
 
-        session['oauth_token'] = provider.extract_access_token_from_response(access_token_response)
-        session['user'] = get_user(userinfo_standard, provider.name).to_json_map()
+        session['oauth_token'] = client.extract_access_token_from_response(access_token_response)
+        session['user'] = get_user(userinfo_standard, client.name).to_json_map()
 
         next_url = request.args.get('state')
         if next_url is not None:
