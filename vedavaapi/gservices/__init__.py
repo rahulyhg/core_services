@@ -6,14 +6,15 @@ from vedavaapi.google_helper import GServices
 
 ServiceObj = None
 
+
 class VedavaapiGservices(VedavaapiService):
     config_template = {
-      "google_creds_base_dir" : "/home/samskritam/vedavaapi/core_services/vedavaapi/conf_local/creds/google/",
-      "credentials_path" : "vedavaapi-credentials.json",
-      "is_service_account_credentials" : 0,
-      "scopes" : [
-        "https://www.googleapis.com/auth/drive.readonly", 
-        "https://www.googleapis.com/auth/spreadsheets.readonly"]
+        "google_creds_base_dir": "/home/samskritam/vedavaapi/core_services/vedavaapi/conf_local/creds/google/",
+        "credentials_path": "vedavaapi-credentials.json",
+        "is_service_account_credentials": 0,
+        "scopes": [
+            "https://www.googleapis.com/auth/drive.readonly",
+            "https://www.googleapis.com/auth/spreadsheets.readonly"]
     }
 
     def __init__(self, registry, name, conf):
@@ -45,18 +46,19 @@ class VedavaapiGservices(VedavaapiService):
         scopes = effective_conf['scopes']
         auth_through_service_account = bool(effective_conf['is_service_account_credentials'])
 
-        return GServices.from_creds_file(credentials_path, scopes=scopes, auth_through_service_account=auth_through_service_account)
+        return GServices.from_creds_file(credentials_path, scopes=scopes,
+                                         auth_through_service_account=auth_through_service_account)
 
-    #def
 
 def myservice():
     return ServiceObj
 
+
 api_blueprints = []
+
 
 def import_blueprints_after_service_is_ready(service_obj):
     global ServiceObj
     ServiceObj = service_obj
     from .api import v1_bp
     api_blueprints.append(v1_bp)
-

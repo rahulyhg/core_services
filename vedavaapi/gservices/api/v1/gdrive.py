@@ -2,9 +2,9 @@ import requests
 from flask import request
 from flask_restplus import Resource, Namespace, reqparse
 
-from ..v1 import gservices, creds_dict
+from . import creds_dict, myservice
 
-factory = gservices.ServiceObj.services()
+factory = myservice().services()
 gdrive = factory.gdrive()
 
 gdrive_ns = Namespace('gdrive', description='proxy methods to gdrive')
@@ -21,10 +21,10 @@ class Raw(Resource):
             params[key] = values[0] if len(values) == 1 else values
 
         access_token_request_data = {
-            'grant_type' : 'refresh_token',
-            'refresh_token' : creds_dict()['refresh_token'],
-            'client_id' : creds_dict()['client_id'],
-            'client_secret' : creds_dict()['client_secret']
+            'grant_type': 'refresh_token',
+            'refresh_token': creds_dict()['refresh_token'],
+            'client_id': creds_dict()['client_id'],
+            'client_secret': creds_dict()['client_secret']
         }
 
         atr = requests.post(creds_dict()['token_uri'], data=access_token_request_data)
@@ -33,7 +33,7 @@ class Raw(Resource):
 
         drive_api_uri_prefix = 'https://www.googleapis.com/drive/v3/'
         drive_request_url = drive_api_uri_prefix + path
-        auth_headers = {'Authorization' : atr.json().get('token_type') + ' '+ access_token}
+        auth_headers = {'Authorization': atr.json().get('token_type') + ' ' + access_token}
         api_response = requests.get(drive_request_url, params=params, headers=auth_headers)
 
         response_json = api_response.json()
@@ -52,7 +52,7 @@ class Folder(Resource):
         "orderBy",
         location='args', default='name_natural',
         help='A comma-separated list of sort keys. how spreadsheets should be ordered. valid options are "createdTime", "modifiedTime", "name", "name_natural", "recency", "starred". Each key sorts ascending by default, but may be reversed with the "desc" modifier. Example usage: ?orderBy=modifiedTime desc,name. default is by "name_natural".'
-        )
+    )
     reqparser.add_argument(
         'mimeType',
         location='args', default=None,
@@ -62,21 +62,25 @@ class Folder(Resource):
 
     def get(self, folderId):
         additional_args = self.reqparser.parse_args()
-        response_table, code = gdrive.list_of_files_in_folder(folder_id=folderId, mime_types=additional_args.pop('mimeType'), additional_pargs=additional_args)
+        response_table, code = gdrive.list_of_files_in_folder(folder_id=folderId,
+                                                              mime_types=additional_args.pop('mimeType'),
+                                                              additional_pargs=additional_args)
 
         return response_table, code
 
+
 def error_response(**kwargs):
-    #print ('in error_response')
-    response = {'error' : {}}
+    # print ('in error_response')
+    response = {'error': {}}
     is_error_inherited = 'inherited_error_table' in kwargs
-    response_code = kwargs.get('code', kwargs['inherited_error_table']['error'].get('code', 500) if is_error_inherited else 500)
+    response_code = kwargs.get('code',
+                               kwargs['inherited_error_table']['error'].get('code', 500) if is_error_inherited else 500)
     response_message = kwargs.get('message', None)
 
     response['error']['code'] = response_code
-    if response_message is not None :
+    if response_message is not None:
         response['error']['message'] = response_message
-    if is_error_inherited :
+    if is_error_inherited:
         response['error']['inherited_error'] = kwargs['inherited_error_table']['error']
 
     return (response), response_code

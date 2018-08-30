@@ -1,6 +1,5 @@
 import flask_restplus, flask
 
-
 URL_PREFIX = '/v0'
 api_blueprint = flask.Blueprint(name='auth0', import_name=__name__)
 
@@ -11,4 +10,4 @@ api = flask_restplus.Api(app=api_blueprint, version='1.0', title='vedavaapi py u
                                      'A list of REST and non-REST API routes avalilable on this server: <a href="../sitemap">sitemap</a>.',
                          default_label=api_blueprint.name, prefix=URL_PREFIX)
 
-from ..v0 import rest
+from . import rest

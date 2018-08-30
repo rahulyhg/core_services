@@ -2,7 +2,8 @@ import logging
 
 from flask import url_for, session
 from flask_oauthlib.client import OAuth
-from ... import get_db, myservice, get_default_permissions
+from .. import get_db
+from ... import myservice, get_default_permissions
 
 logging.basicConfig(
     level=logging.DEBUG,
