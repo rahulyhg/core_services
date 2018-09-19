@@ -219,3 +219,5 @@ class FacebookClient(OAuthClient):
 
 
 OAuthClient.register_provider_class('facebook', FacebookClient)
+
+# TODO separate oauth functionality to seperate generic package

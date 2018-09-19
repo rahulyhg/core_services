@@ -71,10 +71,22 @@ class VedavaapiService(object):
         self.name = name
         self.config = conf
 
-    def setup(self):
+    def setup(self, repos=None):
+        '''
+
+        :param repos: if we want to setup only perticular repos, then pass array of repo_ids.
+                        by default, setups all repos.
+        :return:
+        '''
         pass
 
-    def reset(self):
+    def reset(self, repos=None):
+        '''
+
+        :param repos: if we want to reset only perticular repos, then pass array of repo_ids.
+                        by default, resets all repos.
+        :return:
+        '''
         pass
 
     def register_api(self, flaskApp, url_prefix):

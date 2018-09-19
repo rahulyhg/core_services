@@ -36,9 +36,12 @@ class VedavaapiStore(VedavaapiService):
             return  None
         return '.'.join(['_'.join([self.repo_conf_for(repo_id).get('db_prefix'), db_name_end])] + ([collection_name] if collection_name else []))
 
-    def names_of_db_from_all_repos(self, db_name_end):
+    def names_of_db_from_repos(self, db_name_end, repos=None):
         names = {}
-        for repo in self.all_repos():
+        if repos is None:
+            repos = self.all_repos()
+
+        for repo in repos:
             name = self.name_of_db(repo, db_name_end)
             if name:
                 names[repo] = name
@@ -60,10 +63,13 @@ class VedavaapiStore(VedavaapiService):
             db_name_frontend=db_name_frontend or db_name,
             external_file_store=external_file_store_path, db_type=db_type)
 
-    def db_interfaces_from_all_repos(self, db_name_end, collection_name=None, db_name_frontend=None, file_store_base_path=None, db_type=None):
+    def db_interfaces_from_repos(self, db_name_end, collection_name=None, db_name_frontend=None, file_store_base_path=None, db_type=None, repos=None):
         # may need this at initialization time for all repos
         db_interfaces = {}
-        for repo in self.all_repos():
+        if repos is None:
+            repos = self.all_repos()
+
+        for repo in repos:
             db_interfaces[repo] = self.db_interface_for(repo, db_name_end, collection_name, db_name_frontend, file_store_base_path, db_type)
         return db_interfaces
 
@@ -82,9 +88,24 @@ class VedavaapiStore(VedavaapiService):
                 except Exception as e:
                     logging.error('Error removing {path}: {e}'.format(path=file_store_path, e=e))
 
-    def delete_db_in_all_repos(self, db_name_end, collection_names=None, delete_external_file_store=False, file_store_base_path=None):
-        for repo in self.all_repos():
+    def delete_db_in_repos(self, db_name_end, collection_names=None, delete_external_file_store=False, file_store_base_path=None, repos=None):
+        if repos is None:
+            repos = self.all_repos()
+
+        for repo in repos:
             self.delete_db(repo, db_name_end, collection_names, delete_external_file_store=delete_external_file_store, file_store_base_path=file_store_base_path)
+
+    def reset_repo(self, repo_id, services=None):
+        all_services = self.registry.all_services.copy()
+        if services is None:
+            services = all_services
+        for service in services:
+            if not service in all_services:
+                continue
+            service_obj = services[service]
+            service_obj.reset(repos=[repo_id])
+            service_obj.setup(repos=[repo_id])
+        return True
 
 
 def myservice():

@@ -98,13 +98,16 @@ class VedavaapiUsers(VedavaapiService):
         self.vvstore = registry.lookup("store")
         import_blueprints_after_service_is_ready(self)
 
-    def reset(self):
+    def reset(self, repos=None):
         db_name_end = self.config.get('users_db')
-        self.vvstore.delete_db_in_all_repos(db_name_end=db_name_end)
+        self.vvstore.delete_db_in_repos(db_name_end=db_name_end, repos=repos)
 
-    def setup(self):
+    def setup(self, repos=None):
+        if repos is None:
+            repos = self.vvstore.all_repos()
+
         db_name_end = self.config.get('users_db')
-        self.dbs_map = self.vvstore.db_interfaces_from_all_repos(
+        self.dbs_map = self.vvstore.db_interfaces_from_repos(
             db_name_end=db_name_end,
             db_name_frontend='users',
             db_type="users_db"
@@ -114,6 +117,8 @@ class VedavaapiUsers(VedavaapiService):
         default_permissions_in = self.config["default_permissions"]
 
         for repo, db_interface in self.dbs_map.items():
+            if not repo in repos:
+                continue
             db_interface.add_index(keys_dict={
                 "authentication_infos.auth_user_id": 1
             }, index_name="authentication_infos.auth_user_id")
