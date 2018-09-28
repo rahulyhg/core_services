@@ -1,145 +1,69 @@
 import logging
-import sys
-import os
 
 from sanskrit_data.schema.users import User
-from vedavaapi.common import VedavaapiService
+from vedavaapi.common import VedavaapiService, ServiceRepoInterface
 
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(levelname)s: %(asctime)s {%(filename)s:%(lineno)d}: %(message)s "
 )
 
+
 ServiceObj = None
-DEFAULT_REPO = None
+
+
+class UsersRepoInterface(ServiceRepoInterface):
+    def __init__(self, service, repo_name):
+        super(UsersRepoInterface, self).__init__(service, repo_name)
+        self.db_name_suffix = self.service.config.get('users_db')
+        self.users_db = self.db(db_name_suffix=self.db_name_suffix, db_type="users_db")
+
+    def initialize(self):
+        initial_users = self.service.config["initial_users"]
+        self.users_db.add_index(keys_dict={
+            "authentication_infos.auth_user_id": 1
+        }, index_name="authentication_infos.auth_user_id")
+
+        # Add initial users to the users db if they don't exist.
+        logging.info("Add initial users to the users db if they don't exist.")
+        if initial_users is None:
+            return
+        for initial_user_dict in initial_users:
+            initial_user = User.make_from_dict(initial_user_dict)
+            matching_users = self.users_db.get_matching_users_by_auth_infos(user=initial_user)
+            if len(matching_users) == 0:
+                logging.info("Adding: " + str(initial_user))
+                # Use this instead of update_doc to auto-generate auth_secret_bcrypt
+                initial_user.update_collection(db_interface=self.users_db)
+            else:
+                logging.info("Not adding: " + str(initial_user))
+
+    def reset(self):
+        self.store.delete_db(
+            repo_name=self.repo_name,
+            db_name_suffix=self.db_name_suffix)
 
 
 class VedavaapiUsers(VedavaapiService):
-    config_template = {
-        "users_db_name": "vedavaapi_users",
-        "oauth": {
-            "google": {
-                "comment": "Created by vishvas.vasuki at https://console.developers.google.com/apis/credentials?project=sanskritnlp",
-                "client_id": "703448017295-2rod58o21lumfs1jkhphaojkh46cooo1.apps.googleusercontent.com",
-                "client_secret": "Ns2-dcnpEb5M84hdhtRvUaC0"
-            },
-            "facebook": {
-                "client_id": "1706950096293019",
-                "client_secret": "1b2523ac7d0f4b7a73c410b2ec82586c"
-            },
-            "twitter": {
-                "client_id": "jSd7EMZFTQlxjLFG4WLmAe2OX",
-                "client_secret": "gvkh9fbbnKQXXbnqxfs8C0tCEqgNKKzoYJAWQQwtMG07UOPKAj"
-            }
-        },
-        "initial_users": [
-            {
-                "authentication_infos": [
-                    {
-                        "auth_provider": "google",
-                        "auth_user_id": "sai.susarla@gmail.com",
-                        "jsonClass": "AuthenticationInfo"
-                    }
-                ],
-                "jsonClass": "User",
-                "permissions": [
-                    {
-                        "actions": [
-                            "read",
-                            "write",
-                            "admin"
-                        ],
-                        "jsonClass": "UserPermission",
-                        "service": ".*"
-                    }
-                ],
-                "user_type": "human"
-            },
-            {
-                "authentication_infos": [
-                    {
-                        "auth_provider": "vedavaapi",
-                        "auth_user_id": "vedavaapiAdmin",
-                        "auth_secret_plain": "@utoDump1",
-                        "jsonClass": "AuthenticationInfo"
-                    }
-                ],
-                "jsonClass": "User",
-                "permissions": [
-                    {
-                        "actions": [
-                            "read",
-                            "write",
-                            "admin"
-                        ],
-                        "jsonClass": "UserPermission",
-                        "service": ".*"
-                    }
-                ],
-                "user_type": "bot"
-            }
-        ],
-        "default_permissions": [
-            {
-                "actions": [
-                    "read",
-                    "write"
-                ],
-                "jsonClass": "UserPermission",
-                "service": "quotes"
-            }
-        ]
-    }
-
-    dependency_services = ['store']
+    repo_interface_class = UsersRepoInterface
+    dependency_services = ['store', 'credentials']
 
     def __init__(self, registry, name, conf):
         super(VedavaapiUsers, self).__init__(registry, name, conf)
         self.vvstore = registry.lookup("store")
+        self.default_permissions = self.config["default_permissions"]
         import_blueprints_after_service_is_ready(self)
 
-    def reset(self, repos=None):
-        db_name_end = self.config.get('users_db')
-        self.vvstore.delete_db_in_repos(db_name_end=db_name_end, repos=repos)
+    def db(self, repo_name):
+        return self.get_repo(repo_name).users_db
 
-    def setup(self, repos=None):
-        if repos is None:
-            repos = self.vvstore.all_repos()
-
-        db_name_end = self.config.get('users_db')
-        self.dbs_map = self.vvstore.db_interfaces_from_repos(
-            db_name_end=db_name_end,
-            db_name_frontend='users',
-            db_type="users_db"
-        )
-
-        initial_users = self.config["initial_users"]
-        default_permissions_in = self.config["default_permissions"]
-
-        for repo, db_interface in self.dbs_map.items():
-            if not repo in repos:
-                continue
-            db_interface.add_index(keys_dict={
-                "authentication_infos.auth_user_id": 1
-            }, index_name="authentication_infos.auth_user_id")
-
-            # Add initial users to the users db if they don't exist.
-            logging.info("Add initial users to the users db if they don't exist.")
-            if initial_users is not None:
-                for initial_user_dict in initial_users:
-                    initial_user = User.make_from_dict(initial_user_dict)
-                    matching_users = db_interface.get_matching_users_by_auth_infos(user=initial_user)
-                    if len(matching_users) == 0:
-                        logging.info("Adding: " + str(initial_user))
-                        # Use this instead of update_doc to auto-generate auth_secret_bcrypt
-                        initial_user.update_collection(db_interface=db_interface)
-                    else:
-                        logging.info("Not adding: " + str(initial_user))
-
-        self.default_permissions = default_permissions_in
-
-    def get_db(self, repo_id):
-        return self.dbs_map.get(repo_id, None)
+    def oauth_config(self, repo_name, provider_name):
+        oauth_config = self.config['oauth']
+        provider_specific_config = oauth_config.get(provider_name)
+        provider_specific_config['client_secret_file_path'] = self.registry.lookup('credentials').creds_path(
+            repo_name,
+            provider_specific_config['client_secret_file_base_path'])
+        return provider_specific_config
 
 
 def myservice():

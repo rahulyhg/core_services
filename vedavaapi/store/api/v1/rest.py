@@ -3,13 +3,13 @@ from base64 import b64encode
 
 import flask_restplus
 from flask import session
-from vedavaapi.common import get_user
+from vedavaapi.common.api_common import get_user, error_response
 
 from . import api
 from ... import myservice
 
-REPO_ID_KEY = 'repo_id'
 
+REPO_ID_KEY = 'repo_name'
 
 
 def is_user_admin():
@@ -17,6 +17,7 @@ def is_user_admin():
     if user is None or not user.check_permission(service="users", action="admin"):
         return False
     return True
+
 
 def purge_old_repo_specifics():
     '''
@@ -31,31 +32,31 @@ def purge_old_repo_specifics():
     session.pop('reset_repo', None)
     session.pop(REPO_ID_KEY, None)
 
+
 @api.route('/repo')
 class Repo(flask_restplus.Resource):
     post_parser = api.parser()
-    post_parser.add_argument('repo_id', location='form')
+    post_parser.add_argument('repo_name', location='form')
 
     def get(self):
-        if not REPO_ID_KEY in session:
-            return {'error': 'repo not setted'}, 404
+        if REPO_ID_KEY not in session:
+            return error_response(message='repo not setted', code=404)
 
-        return {'repo_id': session[REPO_ID_KEY]}, 200
+        return {'repo_name': session[REPO_ID_KEY]}, 200
 
     @api.expect(post_parser, validate=True)
     def post(self):
         args = self.post_parser.parse_args()
-        if not args['repo_id'] in myservice().all_repos():
-            return {'error': 'invalid repo id'}, 404
+        if not args['repo_name'] in myservice().repo_names():
+            return error_response(message='invalid repo name', code=404)
 
         purge_old_repo_specifics()
-        session[REPO_ID_KEY] = args['repo_id']
-        return {'repo_id': session[REPO_ID_KEY]}, 200
+        session[REPO_ID_KEY] = args['repo_name']
+        return {'repo_name': session[REPO_ID_KEY]}, 200
 
     def delete(self):
         purge_old_repo_specifics()
-        return 'repo id deleted.', 200
-
+        return 'repo info deleted.', 200
 
 
 @api.route('/all_repos')
@@ -63,16 +64,17 @@ class AllRepos(flask_restplus.Resource):
 
     def get(self):
         return {
-                'repos': myservice().all_repos()
+                'repos': myservice().repo_names()
                }, 200
+
 
 @api.route('/actions/reset')
 class Reset(flask_restplus.Resource):
     def get(self):
         if not is_user_admin():
-            return 'user is not admin', 403
+            return error_response(message='user is not admin', code=403)
         if not session.get(REPO_ID_KEY, None):
-            return 'repo not setted!', 403
+            return error_response(message='repo not setted', code=403)
         reset_token = b64encode(os.urandom(24)).decode('utf-8')
         session['reset_token'] = reset_token
         session['reset_repo'] = session[REPO_ID_KEY]
@@ -82,9 +84,9 @@ class Reset(flask_restplus.Resource):
         session.pop('user', None)
 
         return {
-            'reset_token' : reset_token,
-            'repo_id' : session[REPO_ID_KEY],
-            'message' : 'to reset the repo, please login back again, and do post call to same url, attaching reset_token in form data'
+            'reset_token': reset_token,
+            'repo_id': session[REPO_ID_KEY],
+            'message': 'to reset the repo, please login back again, and do post call to same url, attaching reset_token in form data'
         }, 200
 
     post_parser = api.parser()
@@ -98,21 +100,19 @@ class Reset(flask_restplus.Resource):
             return 'repo not setted', 403
         if not is_user_admin():
             purge_old_repo_specifics()
-            return 'user is not admin', 403
+            return error_response(message='user is not admin', code=403)
         if not session.get('reset_token', None) or not session.get('reset_repo', None):
-            return 'first get reset_token from get call, and then make this api call.', 403
+            return error_response(message='first get reset_token from get call, and then make this api call', code=403)
 
         args = self.post_parser.parse_args()
         print(args, session)
         if not (session.get('reset_token', None) == args.get('reset_token', None)) or not (session.get('reset_repo') == old_repo):
             purge_old_repo_specifics()
-            return 'illegal', 403
+            return error_response(message='illegal', code=403)
 
         purge_old_repo_specifics()
         services_to_be_resetted = args['services'].split(',') if args['services'] else None
-        myservice().reset_repo(old_repo, services=services_to_be_resetted)
+        myservice().reset_repo(old_repo, service_names=services_to_be_resetted)
 
         session[REPO_ID_KEY] = old_repo
         return 'repo resetted successfully', 200
-
-

@@ -2,10 +2,16 @@ import requests
 from flask import request
 from flask_restplus import Resource, Namespace, reqparse
 
+from vedavaapi.common.api_common import error_response, check_and_get_repo_name
+
 from . import creds_dict, myservice
 
-factory = myservice().services()
-gdrive = factory.gdrive()
+
+def gdrive():
+    repo_name = check_and_get_repo_name()
+    factory = myservice().services(repo_name)
+    return factory.gdrive()
+
 
 gdrive_ns = Namespace('gdrive', description='proxy methods to gdrive')
 
@@ -62,25 +68,6 @@ class Folder(Resource):
 
     def get(self, folderId):
         additional_args = self.reqparser.parse_args()
-        response_table, code = gdrive.list_of_files_in_folder(folder_id=folderId,
-                                                              mime_types=additional_args.pop('mimeType'),
-                                                              additional_pargs=additional_args)
+        response_table, code = gdrive().list_of_files_in_folder(folder_id=folderId, mime_types=additional_args.pop('mimeType'), additional_pargs=additional_args)
 
         return response_table, code
-
-
-def error_response(**kwargs):
-    # print ('in error_response')
-    response = {'error': {}}
-    is_error_inherited = 'inherited_error_table' in kwargs
-    response_code = kwargs.get('code',
-                               kwargs['inherited_error_table']['error'].get('code', 500) if is_error_inherited else 500)
-    response_message = kwargs.get('message', None)
-
-    response['error']['code'] = response_code
-    if response_message is not None:
-        response['error']['message'] = response_message
-    if is_error_inherited:
-        response['error']['inherited_error'] = kwargs['inherited_error_table']['error']
-
-    return (response), response_code

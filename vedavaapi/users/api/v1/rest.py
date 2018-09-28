@@ -8,15 +8,25 @@ from sanskrit_data.schema.common import JsonObject
 import sanskrit_data.schema.common as common_data_containers
 from sanskrit_data.schema.users import AuthenticationInfo, User
 
+from vedavaapi.common.api_common import error_response, check_and_get_repo_name
+
+from ... import get_default_permissions, myservice
+from .. import get_db
 from . import api
 from .oauth import OAuthClient
-from .. import get_db
-from ... import get_default_permissions
 
 
 def redirect_js(next_url):
     return 'Continue on to <a href="%(url)s">%(url)s</a>. <script>window.location = "%(url)s";</script>' % {
         "url": next_url}
+
+
+def oauth_client(provider_name):
+    oauth_config = myservice().oauth_config(
+        check_and_get_repo_name(),
+        provider_name
+    )
+    return OAuthClient.get_client_for_provider(provider_name, oauth_config)
 
 
 @api.route('/oauth_login/<string:provider_name>')
@@ -26,10 +36,13 @@ class OauthLogin(flask_restplus.Resource):
 
     @api.expect(get_parser, validate=True)
     def get(self, provider_name):
-        client = OAuthClient.get_client_for_provider(provider_name)
+        client = oauth_client(provider_name)
         if not client:
-            return {'error': {'message': 'currently oauth provider with name "{provider_name}" not supported.'.format(
-                provider_name=provider_name)}}, 400
+            return error_response(
+                message='currently oauth provider with name "{provider_name}" not supported.'.format(
+                    provider_name=provider_name),
+                code=400
+            )
         return client.redirect_for_authorization(next_url=flask.request.args.get('next_url'))
 
 
@@ -44,16 +57,22 @@ class OauthAuthorized(flask_restplus.Resource):
         401: 'Unauthorized.',
     })
     def get(self, provider_name):
-        client = OAuthClient.get_client_for_provider(provider_name)
+        client = oauth_client(provider_name)
         if not client:
-            return {'error': {'message': 'currently oauth provider with name "{provider_name}" not supported.'.format(
-                provider_name=provider_name)}}, 400
+            return error_response(
+                message='currently oauth provider with name "{provider_name}" not supported.'.format(
+                    provider_name=provider_name),
+                code=400
+            )
         auth_code = client.extract_auth_code()
         access_token_response = client.exchange_code_for_access_token(auth_code)
         userinfo, response_code = client.get_user_info(access_token_response=access_token_response)
         if 'error' in userinfo:
             # TODO should return/redirect to a custom error page instead.
-            return {'error': 'error in authenticating'}, 401
+            return error_response(
+                message='error in authenticating',
+                code=401
+            )
 
         # provider agnostic key value format with data extracted.
         userinfo_standard = client.user_info_in_standard_format(userinfo)
@@ -65,14 +84,14 @@ class OauthAuthorized(flask_restplus.Resource):
         if next_url is not None:
             next_url_final = furl(next_url)
             if not next_url_final.netloc:
-                return {"message" : "logged in successfully, but next_url '{}' is invalid url".format(next_url)}, response_code
+                return {'message': "logged in successfully, but next_url '{}' is invalid url".format(next_url)}, response_code
             if not next_url_final.scheme:
                 next_url_final.scheme = "http"
             next_url_final.args["response_code"] = response_code
             from flask import Response
             return Response(redirect_js(next_url_final))
         else:
-            return {"message": "logged in successfully. but, did not get a next_url, it seems!"}, response_code
+            return {'message': 'logged in successfully. but, did not get a next_url, it seems!'}, response_code
 
 
 def get_user(userinfo, provider_name):
@@ -114,7 +133,7 @@ class CurrentUserHandler(flask_restplus.Resource):
         """
         session_user = JsonObject.make_from_dict(session.get('user', None))
         if session_user is None:
-            return {"message": "No user found, not authorized!"}, 401
+            return error_response(message="No user found, not authorized!", code=401)
         else:
             return [session_user.to_json_map()], 200
 
@@ -157,29 +176,30 @@ class UserListHandler(flask_restplus.Resource):
         """
         logging.info(str(request.json))
         if not is_user_admin():
-            return {"message": "User is not an admin!"}, 401
+            return error_response(message='User is not an admin!', code=401)
 
         user = common_data_containers.JsonObject.make_from_dict(request.json)
         if not isinstance(user, User):
-            return {"message": "Input JSON object does not conform to User.schema: " + User.schema}, 417
+            return error_response(message='Input JSON object does not conform to User.schema: ' + User.schema, code=417)
 
         # Check to see if there are other entries in the database with identical authentication info.
         matching_users = get_db().get_matching_users_by_auth_infos(user=user)
         if len(matching_users) > 0:
             logging.warning(str(matching_users[0]))
-            return {"message": "Object with matching info already exists. Please edit that instead or delete it.",
-                    "matching_user": matching_users[0].to_json_map()
-                    }, 409
+            return error_response(
+                message='Object with matching info already exists. Please edit that instead or delete it.',
+                matching_user=matching_users[0].to_json_map(),
+                code=409)
 
         try:
             user.update_collection(db_interface=get_db())
         except ValidationError as e:
             import traceback
-            message = {
+            error = {
                 "message": "Some input object does not fit the schema.",
                 "exception_dump": (traceback.format_exc())
             }
-            return message, 417
+            return error_response(code=417, **error)
         return user.to_json_map(), 200
 
 
@@ -202,12 +222,12 @@ class UserHandler(flask_restplus.Resource):
         matching_user = get_db().find_by_id(id=id)
 
         if matching_user is None:
-            return {"message": "User not found!"}, 404
+            return error_response(message='User not found!', code=404)
 
         session_user = JsonObject.make_from_dict(session.get('user', None))
 
         if not is_user_admin() and (session_user is None or session_user._id != matching_user._id):
-            return {"message": "User is not an admin!"}, 401
+            return error_response(message='User is not an admin!', code=401)
 
         return matching_user, 200
 
@@ -233,35 +253,36 @@ class UserHandler(flask_restplus.Resource):
         matching_user = get_db().find_by_id(id=id)
 
         if matching_user is None:
-            return {"message": "User not found!"}, 404
+            return error_response(message='User not found!', code=404)
 
         session_user = JsonObject.make_from_dict(session.get('user', None))
 
         logging.info(str(request.json))
         if not is_user_admin() and (session_user is None or session_user._id != matching_user._id):
-            return {"message": "Unauthorized!"}, 401
+            return error_response(message='Unauthorized!', code=401)
 
         user = common_data_containers.JsonObject.make_from_dict(request.json)
         if not isinstance(user, User):
-            return {"message": "Input JSON object does not conform to User.schema: " + User.schema}, 417
+            return error_response(message='Input JSON object does not conform to User.schema: ' + User.schema, code=417)
 
         # Check to see if there are other entries in the database with identical authentication info.
         matching_users = get_db().get_matching_users_by_auth_infos(user=user)
         if len(matching_users) > 1:
             logging.warning(str(matching_users))
-            return {"message": "Another object with matching info already exists. Please delete it first.",
-                    "another_matching_user": str(matching_users)
-                    }, 409
+            return error_response(
+                message='Another object with matching info already exists. Please delete it first.',
+                another_matching_user=str(matching_users),
+                code=409)
 
         try:
             user.update_collection(db_interface=get_db())
         except ValidationError as e:
             import traceback
-            message = {
+            error = {
                 "message": "Some input object does not fit the schema.",
                 "exception_dump": (traceback.format_exc())
             }
-            return message, 417
+            return error_response(code=417, **error)
         return user.to_json_map(), 200
 
     delete_parser = api.parser()
@@ -283,13 +304,13 @@ class UserHandler(flask_restplus.Resource):
         matching_user = get_db().find_by_id(id=id)
 
         if matching_user is None:
-            return {"message": "User not found!"}, 404
+            return error_response(message="User not found!", code=404)
 
         session_user = JsonObject.make_from_dict(session.get('user', None))
 
         logging.info(str(request.json))
         if not is_user_admin() and (session_user is None or session_user._id != matching_user._id):
-            return {"message": "Unauthorized!"}, 401
+            return error_response(message="Unauthorized!", code=401)
         matching_user.delete_in_collection(db_interface=get_db())
         return {}, 200
 
@@ -314,17 +335,18 @@ class PasswordLogin(flask_restplus.Resource):
         """
         user_id = request.form.get('user_id')
         user_secret = request.form.get('user_secret')
-        user = get_db().get_user_from_auth_info(auth_info=AuthenticationInfo.from_details(auth_user_id=user_id,
-                                                                                          auth_provider="vedavaapi"))
+        user = get_db().get_user_from_auth_info(auth_info=AuthenticationInfo.from_details(
+            auth_user_id=user_id,
+            auth_provider="vedavaapi"))
         logging.debug(user)
         if user is None:
-            return {"message": "No such user_id"}, 401
+            return error_response(message="No such user_id", code=401)
         else:
             authentication_matches = list(
                 filter(lambda info: info.auth_provider == "vedavaapi" and info.check_password(user_secret),
                        user.authentication_infos))
             if not authentication_matches or len(authentication_matches) == 0:
-                return {"message": "Bad pw"}, 401
+                return error_response(message="Bad pw", code=401)
             session['user'] = user.to_json_map()
         # logging.debug(request.args)
         # Example request.args: {'code': '4/BukA679ASNPe5xvrbq_2aJXD_OKxjQ5BpCnAsCqX_Io', 'state': 'http://localhost:63342/vedavaapi/ullekhanam-ui/docs/v0/html/viewbook.html?_id=59adf4eed63f84441023762d'}
@@ -335,7 +357,7 @@ class PasswordLogin(flask_restplus.Resource):
             return Response(redirect_js(next_url))
             # return redirect(next_url)
         else:
-            return {"message": "Did not get a next_url, it seems!"}, 200
+            return {'message': 'Did not get a next_url, it seems!'}, 200
 
 
 @api.route("/logout")
@@ -351,7 +373,7 @@ class LogoutHandler(flask_restplus.Resource):
         if next_url is not None:
             return Response(redirect_js(next_url))
         else:
-            return {"message": "Did not get a next_url, it seems!"}, 200
+            return {'message': 'Did not get a next_url, it seems!'}, 200
 
 
 # noinspection PyMethodMayBeStatic

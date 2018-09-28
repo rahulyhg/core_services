@@ -2,10 +2,14 @@ import requests
 from flask import request
 from flask_restplus import Resource, Namespace, reqparse
 
+from vedavaapi.common.api_common import error_response, check_and_get_repo_name
+
 from . import myservice, creds_dict
 
-factory = myservice().services()
-gsheets = factory.gsheets()
+def gsheets():
+    repo_name = check_and_get_repo_name()
+    factory = myservice().services(repo_name)
+    return factory.gsheets()
 
 gsheets_ns = Namespace('gsheets', description='proxy methods to gsheets')
 
@@ -52,7 +56,7 @@ class Spreadsheet(Resource):
                            help='whether to include sheet header details in response or not. give integer 1 or 0')
 
     def get(self, spreadsheetId):
-        response_table, code = gsheets.spreadsheet_details_for(spreadsheetId, pargs=self.reqparser.parse_args())
+        response_table, code = gsheets().spreadsheet_details_for(spreadsheetId, pargs=self.reqparser.parse_args())
         return response_table, code
 
 
@@ -81,23 +85,7 @@ class Sheet(Resource):
     reqparser.add_argument('range', location='args', help='range of rows in required sheet')
 
     def get(self, spreadsheetId, sheetId):
-        response_table, code = gsheets.sheet_values_for(spreadsheetId, sheetId, pargs=self.reqparser.parse_args())
+        response_table, code = gsheets().sheet_values_for(spreadsheetId, sheetId, pargs=self.reqparser.parse_args())
 
         return response_table, code
 
-
-def error_response(**kwargs):
-    # print ('in error_response')
-    response = {'error': {}}
-    is_error_inherited = 'inherited_error_table' in kwargs
-    response_code = kwargs.get('code',
-                               kwargs['inherited_error_table']['error'].get('code', 500) if is_error_inherited else 500)
-    response_message = kwargs.get('message', None)
-
-    response['error']['code'] = response_code
-    if response_message is not None:
-        response['error']['message'] = response_message
-    if is_error_inherited:
-        response['error']['inherited_error'] = kwargs['inherited_error_table']['error']
-
-    return (response), response_code

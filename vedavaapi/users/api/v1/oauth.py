@@ -48,19 +48,16 @@ class OAuthClient(object):
         cls.oauth_client_classes[provider_name] = provider_class
 
     @classmethod
-    def get_client_for_provider(cls, provider_name, refresh=False):
+    def get_client_for_provider(cls, provider_name, oauth_config, refresh=False):
         if provider_name in cls.oauth_client_objects:
             if not refresh:
                 return cls.oauth_client_objects[provider_name]
 
-        oauth_config = myservice().config['oauth']
-        provider_specific_config = oauth_config.get(provider_name)
-
         provider_class = cls.oauth_client_classes.get(provider_name)
-        if not (provider_class and provider_specific_config):
+        if not (provider_class and oauth_config):
             return None
 
-        cls.oauth_client_objects[provider_name] = provider_class(config=provider_specific_config)
+        cls.oauth_client_objects[provider_name] = provider_class(config=oauth_config)
 
         return cls.oauth_client_objects[provider_name]
 
@@ -70,12 +67,12 @@ class GoogleClient(OAuthClient):
 
     def __init__(self, config):
         super(GoogleClient, self).__init__(name='google')
-        client_secret_path = os.path.join(config['base_dir'], config['client_secret_file'])
+        client_secret_path = config['client_secret_file_path']
         client_secret_data = json.load(open(client_secret_path))
         self.me = {}
         for key in client_secret_data:
             self.me.update(client_secret_data[key])
-            # should hardcode type of creds instead of this.
+            # should hard code type of creds instead of this.
 
     def redirect_for_authorization(self, next_url):
         callback_redirect_uri = url_for('.oauth_authorized', provider_name=self.name, _external=True)
@@ -147,7 +144,7 @@ class FacebookClient(OAuthClient):
 
     def __init__(self, config):
         super(FacebookClient, self).__init__(name='facebook')
-        client_secret_path = os.path.join(config['base_dir'], config['client_secret_file'])
+        client_secret_path = config['client_secret_file_path']
         client_secret_data = json.load(open(client_secret_path))
         self.me = {}
         for key in client_secret_data:

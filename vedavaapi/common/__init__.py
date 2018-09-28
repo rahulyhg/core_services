@@ -7,7 +7,6 @@ import json
 import logging
 import os
 
-from flask import request
 
 logging.basicConfig(
     level=logging.INFO,
@@ -15,81 +14,93 @@ logging.basicConfig(
 )
 
 
-def get_user():
-    from flask import session
-    from sanskrit_data.schema.common import JsonObject
-    return JsonObject.make_from_dict(session.get('user', None))
-
-
-def check_permission(db_name="ullekhanam"):
-    from flask import session
-    user = get_user()
-    logging.debug(request.cookies)
-    logging.debug(session)
-    logging.debug(session.get('user', None))
-    logging.debug(user)
-    if user is None or not user.check_permission(service=db_name, action="write"):
-        return False
-    else:
-        return True
-
-
-def bytes_for(astring, encoding='utf-8', ensure=False):
+def bytes_for(string, encoding='utf-8', ensure=False):
     # whether it is py2.7 or py3, or obj is str or unicode or bytes, this method will return bytes.
-    if isinstance(astring, bytes):
+    if isinstance(string, bytes):
         if ensure:
-            return astring.decode(encoding).encode(encoding)
+            return string.decode(encoding).encode(encoding)
         else:
-            return astring
+            return string
     else:
-        return astring.encode(encoding)
+        return string.encode(encoding)
 
 
-def unicode_for(astring, encoding='utf-8', ensure=False):
+def unicode_for(string, encoding='utf-8', ensure=False):
     # whether it is py2.7 or py3, or obj is str or unicode or bytes, this method will return unicode string.
-    if isinstance(astring, bytes):
-        return astring.decode(encoding)
+    if isinstance(string, bytes):
+        return string.decode(encoding)
     else:
         if ensure:
-            return astring.encode(encoding).decode(encoding)
+            return string.encode(encoding).decode(encoding)
         else:
-            return astring
+            return string
+
+
+class ServiceRepoInterface(object):
+    '''
+    interface to repo(file storage, db, etc.), to be specialized for each service according to it's needs
+    '''
+    def __init__(self, service, repo_name):
+        self.service = service
+        self.store = service.registry.lookup('store')
+        self.repo_name = repo_name
+        try:
+            self.repo_config = json.loads(open(self.file_store_path('conf', 'config.json'), 'rb').read().decode('utf-8'))
+        except FileNotFoundError:
+            self.repo_config = {}
+
+    def initialize(self):
+        pass
+
+    def reset(self):
+        pass
+
+    def db(self, db_name_suffix, collection_name=None, db_type=None):
+        return self.store.db(
+            repo_name=self.repo_name,
+            db_name_suffix=db_name_suffix,
+            collection_name=collection_name,
+            db_type=db_type
+        )
+
+    def file_store_path(self, file_store_type, file_store_base_path):
+        return self.store.file_store_path(
+            self.repo_name,
+            self.service.name,
+            file_store_type or 'data',
+            file_store_base_path)
 
 
 # Base class for all Vedavaapi Service Modules exporting a RESTful API
 class VedavaapiService(object):
     config_template = {}
-    '''
-    explicit declaration of services whom this service uses(depends upon).
-    when starting this service, we can start it's dependency services first.
-    otherwise it will be problem, if services initialized in wrong order, and one service accessed it's dependency in it's initiation
-    '''
     dependency_services = []
+    repo_interface_class = ServiceRepoInterface  # this should be customised by each survice to their specialized interface class
 
-    def __init__(self, registry, name, conf={}):
+    def __init__(self, registry, name, conf=None):
         self.registry = registry
         self.name = name
-        self.config = conf
+        self.config = conf if conf is not None else {}
+        self.repos = {}
 
-    def setup(self, repos=None):
-        '''
+    def setup(self, repo_name):
+        if repo_name not in self.repos:
+            repo = self.repo_interface_class(self, repo_name)
+            self.repos[repo_name] = repo
+        self.repos[repo_name].initialize()
 
-        :param repos: if we want to setup only perticular repos, then pass array of repo_ids.
-                        by default, setups all repos.
-        :return:
-        '''
-        pass
+    def get_repo(self, repo_name):
+        if repo_name not in self.repos:
+            self.setup(repo_name)
+        return self.repos[repo_name]
 
-    def reset(self, repos=None):
-        '''
+    def reset(self, repo_name):
+        if repo_name not in self.repos:
+            repo = self.repo_interface_class(self, repo_name)
+            self.repos[repo_name] = repo
+        self.repos[repo_name].reset()
 
-        :param repos: if we want to reset only perticular repos, then pass array of repo_ids.
-                        by default, resets all repos.
-        :return:
-        '''
-        pass
-
-    def register_api(self, flaskApp, url_prefix):
+    def register_api(self, flask_app, url_prefix):
         modname = "vedavaapi.{}".format(self.name)
         try:
             mod = __import__(modname, globals(), locals(), ["*"])
@@ -101,7 +112,7 @@ class VedavaapiService(object):
             api_blueprints = eval('mod.api_blueprints')
             if api_blueprints:
                 for api_blueprint in mod.api_blueprints:
-                    flaskApp.register_blueprint(api_blueprint, url_prefix=url_prefix)
+                    flask_app.register_blueprint(api_blueprint, url_prefix=url_prefix)
         except Exception as e:
             logging.info("No API service for {}: {}".format(modname, e))
             return
@@ -111,17 +122,13 @@ class VedavaapiService(object):
 # Registry for all Vedavaapi API-based Service Modules
 class VedavaapiServices:
     all_services = {}
-    config_root_dir = None
+    mount_dir = None
     server_config = None
 
     @classmethod
-    def set_config(cls, config_root_dir):
-        """
-        Reads the server configuration from the specified directory for each service, and stores it in the server_config class variable.
-        :param config_root_dir:
-        :return:
-        """
-        cls.config_root_dir = config_root_dir
+    def set_config(cls, mount_path):
+        cls.mount_path = mount_path
+        config_root_dir = os.path.join(cls.mount_path, 'conf')
         cls.server_config = {}
         services_config_dir = os.path.join(config_root_dir, 'services')
         all_services = [config_file.split('.')[0] for config_file in os.listdir(services_config_dir)]
@@ -138,7 +145,7 @@ class VedavaapiServices:
 
     @classmethod
     def lookup(cls, svcname):
-        print("In lookup({}): {}".format(svcname, cls.all_services))
+        # print("In lookup({}): {}".format(svcname, cls.all_services))
         return cls.all_services[svcname] if svcname in cls.all_services else None
 
     @classmethod
@@ -162,19 +169,21 @@ class VedavaapiServices:
 
         if reset:
             logging.info("Resetting previous state of {} ...".format(svcname))
-            svc_obj.reset()
-            #cls.lookup("store")
-        svc_obj.setup()
+            for repo_name in cls.lookup('store').repo_names():
+                svc_obj.reset(repo_name)
+                svc_obj.setup(repo_name)
+            # cls.lookup("store")
+        # svc_obj.setup()
         svc_obj.register_api(app, "/{}".format(svcname))
 
 
-def start_app(app, config_root_dir, services, reset=False):
+def start_app(app, mount_path, services, reset=False):
     if not services:
         return
 
-    VedavaapiServices.set_config(config_root_dir=config_root_dir)
+    VedavaapiServices.set_config(mount_path=mount_path)
 
-    logging.info("Root path: " + app.root_path)
+    logging.info("Mount directory path: " + app.root_path)
     for svc in services:
         if svc in VedavaapiServices.all_services:
             continue

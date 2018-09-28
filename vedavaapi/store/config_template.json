@@ -1,0 +1,28 @@
+{
+  "repos": {
+    "vedavaapi": {
+        "db_type": "mongo",
+        "mongo_host": "mongodb://127.0.0.1:27017",
+        "db_prefix": "vedavaapi",
+        "file_store_base_path": "vedavaapi"
+    },
+    "vedavaapi_test": {
+        "db_type": "mongo",
+        "mongo_host": "mongodb://127.0.0.1:27017",
+        "db_prefix": "vedavaapi_test",
+        "file_store_base_path": "vedavaapi_test"
+    },
+    "vedavaapi_test2": {
+        "db_type": "mongo",
+        "mongo_host": "mongodb://127.0.0.1:27017",
+        "db_prefix": "vedavaapi_test2",
+        "file_store_base_path": "vedavaapi_test2"
+    },
+    "lumium_test": {
+        "db_type": "mongo",
+        "mongo_host": "mongodb://127.0.0.1:27017",
+        "db_prefix": "lumium_test",
+        "file_store_base_path": "lumium_test"
+    }
+  }
+}
