@@ -10,20 +10,20 @@ def get_user():
     return JsonObject.make_from_dict(session.get('user', None))
 
 
-def check_permission(db_name="ullekhanam"):
+def check_permission(svc_name):
     from flask import session
     user = get_user()
     logging.debug(request.cookies)
     logging.debug(session)
     logging.debug(session.get('user', None))
     logging.debug(user)
-    if user is None or not user.check_permission(service=db_name, action="write"):
+    if user is None or not user.check_permission(service=svc_name, action="write"):
         return False
     else:
         return True
 
 
-def check_and_get_repo_name():
+def get_repo():
     # check and retrieve present repo_name
     import flask
     repo_name = flask.session.get('repo_name', VedavaapiServices.lookup('store').default_repo)

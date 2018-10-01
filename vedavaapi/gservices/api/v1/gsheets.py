@@ -2,12 +2,12 @@ import requests
 from flask import request
 from flask_restplus import Resource, Namespace, reqparse
 
-from vedavaapi.common.api_common import error_response, check_and_get_repo_name
+from vedavaapi.common.api_common import error_response, get_repo
 
-from . import myservice, creds_dict
+from .. import myservice, creds_dict
 
 def gsheets():
-    repo_name = check_and_get_repo_name()
+    repo_name = get_repo()
     factory = myservice().services(repo_name)
     return factory.gsheets()
 

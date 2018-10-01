@@ -1,11 +1,15 @@
-from vedavaapi.common.api_common import check_and_get_repo_name
+from vedavaapi.common.api_common import get_repo
 
-from .. import myservice
+from .. import VedavaapiUsers
 
 
-def get_db():
-    repo_name = check_and_get_repo_name()
-    return myservice().db(repo_name)
+def myservice():
+    return VedavaapiUsers.instance
 
-from .v0 import api_blueprint as apiv0_blueprint
-from .v1 import api_blueprint as apiv1_blueprint
+
+def get_colln():
+    repo_name = get_repo()
+    return myservice().colln(repo_name)
+
+
+from .v1 import api_blueprint_v1 as api_blueprint__v1

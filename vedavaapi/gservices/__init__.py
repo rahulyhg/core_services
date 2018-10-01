@@ -1,10 +1,7 @@
 import json
 
-from vedavaapi.common import VedavaapiService, ServiceRepoInterface
+from vedavaapi.common import VedavaapiService, ServiceRepo
 from vedavaapi.google_helper import GServices
-
-
-ServiceObj = None
 
 
 def load_creds_config(creds_path):
@@ -23,10 +20,10 @@ def load_creds_config(creds_path):
         return None
 
 
-class GservicesRepoInterface(ServiceRepoInterface):
+class GservicesRepo(ServiceRepo):
 
     def __init__(self, service, repo_name):
-        super(GservicesRepoInterface, self).__init__(service, repo_name)
+        super(GservicesRepo, self).__init__(service, repo_name)
         self.authorized_creds_path = self.service.registry.lookup('credentials').creds_path(
             repo_name=repo_name,
             creds_base_path=self.service.config['authorized_creds_base_path'])
@@ -44,12 +41,17 @@ class VedavaapiGservices(VedavaapiService):
     service_account_default_scopes = [
         "https://www.googleapis.com/auth/drive.readonly",
         "https://www.googleapis.com/auth/spreadsheets.readonly"]
+
+    instance = None  # setting again to not fallback on super's
+
     dependency_services = ['store', 'credentials']
-    repo_interface_class = GservicesRepoInterface
+    svc_repo_class = GservicesRepo
+
+    title = 'Vedavaapi Gservices'
+    description = 'vedavaapi service, for easy interaction with all google api services.'
 
     def __init__(self, registry, name, conf):
         super(VedavaapiGservices, self).__init__(registry, name, conf)
-        import_blueprints_after_service_is_ready(self)
 
     def creds_path(self, repo_name):
         # to be used by it's api
@@ -64,16 +66,3 @@ class VedavaapiGservices(VedavaapiService):
         effective_conf.update(custom_conf)
         return GServices.from_creds_file(**effective_conf)
 
-
-def myservice():
-    return ServiceObj
-
-
-api_blueprints = []
-
-
-def import_blueprints_after_service_is_ready(service_obj):
-    global ServiceObj
-    ServiceObj = service_obj
-    from .api import v1_bp
-    api_blueprints.append(v1_bp)

@@ -5,8 +5,8 @@ import flask_restplus
 from flask import session
 from vedavaapi.common.api_common import get_user, error_response
 
+from .. import myservice
 from . import api
-from ... import myservice
 
 
 REPO_ID_KEY = 'repo_name'
@@ -20,12 +20,12 @@ def is_user_admin():
 
 
 def purge_old_repo_specifics():
-    '''
+    """
     this will purge all configurations specific to repo.
     like logged in user, etc., as they are defined for only specific repo as of now.
     this will prevent hijacking one repo from other.
     :return:
-    '''
+    """
     session.pop('oauth_token', None)
     session.pop('user', None)
     session.pop('reset_token', None)

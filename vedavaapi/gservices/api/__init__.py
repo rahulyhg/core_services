@@ -1,1 +1,21 @@
-from .v1 import v1_bp
+import json
+
+from vedavaapi.common.api_common import get_repo
+
+from .. import VedavaapiGservices
+
+'''
+any common little functionality that can be used in all versions should be here, and nothing else.
+'''
+
+
+def myservice():
+    return VedavaapiGservices.instance
+
+
+def creds_dict():
+    credentials_dict = json.load(open(myservice().creds_path(get_repo())))
+    return credentials_dict
+
+
+from .v1 import api_blueprint_v1

@@ -1,9 +1,18 @@
-import logging, os.path
+import flask_restplus
+from flask import Blueprint
 
-import flask_restplus, flask
+from .. import myservice
 
-URL_PREFIX = '/v1'
-api_blueprint = flask.Blueprint(name='auth1', import_name=__name__)
 
-api = flask_restplus.Api(app=api_blueprint, version='1.0', prefix=URL_PREFIX, title="Users")
+api_blueprint_v1 = Blueprint(myservice().name+'_v1', __name__)
+
+
+api = flask_restplus.Api(
+    app=api_blueprint_v1,
+    version='1.0',
+    prefix='/v1',
+    title=myservice().title,
+    description=myservice().description,
+    doc='/v1')
+
 from . import rest

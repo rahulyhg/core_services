@@ -6,7 +6,7 @@ Some common utilities.
 import json
 import logging
 import os
-
+import re
 
 logging.basicConfig(
     level=logging.INFO,
@@ -36,10 +36,10 @@ def unicode_for(string, encoding='utf-8', ensure=False):
             return string
 
 
-class ServiceRepoInterface(object):
-    '''
+class ServiceRepo(object):
+    """
     interface to repo(file storage, db, etc.), to be specialized for each service according to it's needs
-    '''
+    """
     def __init__(self, service, repo_name):
         self.service = service
         self.store = service.registry.lookup('store')
@@ -55,12 +55,10 @@ class ServiceRepoInterface(object):
     def reset(self):
         pass
 
-    def db(self, db_name_suffix, collection_name=None, db_type=None):
+    def db(self, db_name_suffix):
         return self.store.db(
             repo_name=self.repo_name,
-            db_name_suffix=db_name_suffix,
-            collection_name=collection_name,
-            db_type=db_type
+            db_name_suffix=db_name_suffix
         )
 
     def file_store_path(self, file_store_type, file_store_base_path):
@@ -73,67 +71,129 @@ class ServiceRepoInterface(object):
 
 # Base class for all Vedavaapi Service Modules exporting a RESTful API
 class VedavaapiService(object):
+
+    instance = None  # reference to singleton instance object of this service.
+
     config_template = {}
     dependency_services = []
-    repo_interface_class = ServiceRepoInterface  # this should be customised by each survice to their specialized interface class
+    svc_repo_class = ServiceRepo  # this should be customised by each service to it's specialized repo class
+
+    # title for this service, to be used any where like, api title, etc.
+    title = 'Vedavaapi Service'
+    # description for this service.
+    description = 'A Vedavaapi service'
 
     def __init__(self, registry, name, conf=None):
         self.registry = registry
         self.name = name
         self.config = conf if conf is not None else {}
         self.repos = {}
+        self._update_instance_ref(self)
 
-    def setup(self, repo_name):
+    # following are methods dealing with repo, like init, get, reset repo for this service
+    def init_repo(self, repo_name):
+        """
+        initializes repo with given repo_name for this service
+        :param repo_name:
+        :return:
+        """
         if repo_name not in self.repos:
-            repo = self.repo_interface_class(self, repo_name)
+            repo = self.svc_repo_class(self, repo_name)
             self.repos[repo_name] = repo
         self.repos[repo_name].initialize()
 
     def get_repo(self, repo_name):
+        """
+        our way to get handle over a repo for this service.
+        :param repo_name:
+        :return: repo object corresponding to repo_name, and service
+        """
         if repo_name not in self.repos:
-            self.setup(repo_name)
+            self.init_repo(repo_name)
         return self.repos[repo_name]
 
-    def reset(self, repo_name):
+    def reset_repo(self, repo_name):
+        """
+        resets the repo
+        :param repo_name:
+        :return:
+        """
         if repo_name not in self.repos:
-            repo = self.repo_interface_class(self, repo_name)
+            repo = self.svc_repo_class(self, repo_name)
             self.repos[repo_name] = repo
         self.repos[repo_name].reset()
 
-    def register_api(self, flask_app, url_prefix):
-        modname = "vedavaapi.{}".format(self.name)
-        try:
-            mod = __import__(modname, globals(), locals(), ["*"])
-        except Exception as e:
-            logging.info("Cannot load module ", modname)
-            return
 
+    # methods dealing with api plugging.
+    @classmethod
+    def _update_instance_ref(cls, instance):
+        cls.instance = instance
+
+    def _host_module(self):
+        """
+        gets host module, which is hosting this service
+        :return: module object
+        """
+        modname = "vedavaapi.{}".format(self.name)
+        mod = __import__(modname, globals(), locals(), ["*"])
+        return mod
+
+
+    def plug_blueprints(self):
+        """
+        plugs blueprints to be registered, by appending them to api_blueprints array in service instance
+        by default, only plugs blueprint attrs starting with string 'api_blueprint' are plugged
+        for any custom behaviour, or to plug other blueprints, etc, override this method for that service
+        :return: api_blueprints array in the module
+        """
+        # mod = self._host_module()
+        api_blueprints = getattr(self, 'api_blueprints', None)
+        if api_blueprints is None:
+            api_blueprints = []
+            setattr(self, 'api_blueprints', api_blueprints)
+
+        api_modname = 'vedavaapi.{}.api'.format(self.name)
         try:
-            api_blueprints = eval('mod.api_blueprints')
-            if api_blueprints:
-                for api_blueprint in mod.api_blueprints:
-                    flask_app.register_blueprint(api_blueprint, url_prefix=url_prefix)
-        except Exception as e:
-            logging.info("No API service for {}: {}".format(modname, e))
-            return
-        pass
+            api_mod = __import__(api_modname, globals(), locals(), ["*"])
+        except ModuleNotFoundError as mnfe:
+            return None
+
+        import flask  # just to check if an obj is flask.Blueprint obj or not. independent of context
+        blueprints = [
+            getattr(api_mod, bp_attr) for bp_attr in dir(api_mod)
+            if isinstance(getattr(api_mod, bp_attr), flask.Blueprint) and (re.match('api_blueprint', bp_attr))
+        ]
+        for blueprint in blueprints:
+            if blueprint not in api_blueprints:
+                api_blueprints.append(blueprint)
+
+        print('service:{}, blueprints:{}'.format(self.name, api_blueprints))
+
+        return api_blueprints
+
+    def register_api(self, flask_app, url_prefix):
+        # host_mod = self._host_module()
+        api_blueprints = getattr(self, 'api_blueprints', None)
+        if api_blueprints is None:
+            logging.info("No API service for service {}".format(self.name))
+        for api_blueprint in api_blueprints:
+            flask_app.register_blueprint(api_blueprint, url_prefix=url_prefix)
 
 
 # Registry for all Vedavaapi API-based Service Modules
 class VedavaapiServices:
     all_services = {}
-    mount_dir = None
+    install_path = None
     server_config = None
 
     @classmethod
-    def set_config(cls, mount_path):
-        cls.mount_path = mount_path
-        config_root_dir = os.path.join(cls.mount_path, 'conf')
+    def set_config(cls, install_path):
+        cls.install_path = install_path
+        config_root_dir = os.path.join(cls.install_path, 'conf')
         cls.server_config = {}
         services_config_dir = os.path.join(config_root_dir, 'services')
         all_services = [config_file.split('.')[0] for config_file in os.listdir(services_config_dir)]
         for service in all_services:
-            print(service)
             service_config_file = os.path.join(config_root_dir, 'services', '{service}.json'.format(service=service))
             with open(service_config_file, 'rb') as fhandle:
                 cls.server_config[service] = json.loads(fhandle.read().decode('utf-8'))
@@ -157,31 +217,34 @@ class VedavaapiServices:
 
         try:
             for dep in svc_cls.dependency_services:
-                if dep in cls.all_services:
+                if dep in cls.all_services.keys():
+                    # print(dep+' already inited')
                     continue
+                # print(dep+' not yet inited')
                 cls.start(app, dep, reset=reset)
         except Exception as e:
-            pass
+            raise e
 
         svc_conf = cls.server_config[svcname] if svcname in cls.server_config else {}
-        svc_obj = svc_cls(cls, svcname, svc_conf)
-        cls.register(svcname, svc_obj)
+        svc = svc_cls(cls, svcname, svc_conf)
+        cls.register(svcname, svc)
 
         if reset:
             logging.info("Resetting previous state of {} ...".format(svcname))
             for repo_name in cls.lookup('store').repo_names():
-                svc_obj.reset(repo_name)
-                svc_obj.setup(repo_name)
+                svc.reset_repo(repo_name)
+                svc.init_repo(repo_name)
             # cls.lookup("store")
         # svc_obj.setup()
-        svc_obj.register_api(app, "/{}".format(svcname))
+        svc.plug_blueprints()
+        svc.register_api(app, "/{}".format(svcname))
 
 
 def start_app(app, mount_path, services, reset=False):
     if not services:
         return
 
-    VedavaapiServices.set_config(mount_path=mount_path)
+    VedavaapiServices.set_config(install_path=mount_path)
 
     logging.info("Mount directory path: " + app.root_path)
     for svc in services:

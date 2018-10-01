@@ -64,5 +64,6 @@
       "service": "quotes"
     }
   ],
-  "users_db": "users"
+  "users_db": "users",
+  "users_primary_colln": "users"
 }

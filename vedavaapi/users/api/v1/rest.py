@@ -8,10 +8,10 @@ from sanskrit_data.schema.common import JsonObject
 import sanskrit_data.schema.common as common_data_containers
 from sanskrit_data.schema.users import AuthenticationInfo, User
 
-from vedavaapi.common.api_common import error_response, check_and_get_repo_name
+from vedavaapi.common.api_common import error_response, get_repo
 
-from ... import get_default_permissions, myservice
-from .. import get_db
+from ...helper import UsersDbHelper
+from .. import get_colln, myservice
 from . import api
 from .oauth import OAuthClient
 
@@ -23,7 +23,7 @@ def redirect_js(next_url):
 
 def oauth_client(provider_name):
     oauth_config = myservice().oauth_config(
-        check_and_get_repo_name(),
+        get_repo(),
         provider_name
     )
     return OAuthClient.get_client_for_provider(provider_name, oauth_config)
@@ -95,15 +95,13 @@ class OauthAuthorized(flask_restplus.Resource):
 
 
 def get_user(userinfo, provider_name):
-    user = get_db().get_user_from_auth_info(
-        AuthenticationInfo.from_details(auth_user_id=userinfo['email'], auth_provider=provider_name)
-    )
+    user = UsersDbHelper.get_user_from_auth_info(get_colln(), AuthenticationInfo.from_details(auth_user_id=userinfo['email'], auth_provider=provider_name))
     print(user)
     if user is None:
         user = User.from_details(
             auth_infos=[AuthenticationInfo.from_details(auth_user_id=userinfo['email'], auth_provider=provider_name)],
             user_type='human',
-            permissions=get_default_permissions()
+            permissions=myservice().get_default_permissions()
         )
     return user
 
@@ -153,7 +151,7 @@ class UserListHandler(flask_restplus.Resource):
         if not is_user_admin():
             return {"message": "Not authorized!"}, 401
         else:
-            user_list = [user for user in get_db().find(find_filter={})]
+            user_list = [user for user in get_colln().find(find_filter={})]
             logging.debug(user_list)
             return user_list, 200
 
@@ -183,7 +181,8 @@ class UserListHandler(flask_restplus.Resource):
             return error_response(message='Input JSON object does not conform to User.schema: ' + User.schema, code=417)
 
         # Check to see if there are other entries in the database with identical authentication info.
-        matching_users = get_db().get_matching_users_by_auth_infos(user=user)
+        # matching_users = get_db().get_matching_users_by_auth_infos(user=user)
+        matching_users = UsersDbHelper.get_matching_users_by_auth_infos(get_colln(), user)
         if len(matching_users) > 0:
             logging.warning(str(matching_users[0]))
             return error_response(
@@ -192,7 +191,7 @@ class UserListHandler(flask_restplus.Resource):
                 code=409)
 
         try:
-            user.update_collection(db_interface=get_db())
+            user.update_collection(get_colln())
         except ValidationError as e:
             import traceback
             error = {
@@ -219,7 +218,7 @@ class UserHandler(flask_restplus.Resource):
         :param id: String
         :return: A User object.
         """
-        matching_user = get_db().find_by_id(id=id)
+        matching_user = get_colln().find_by_id(id=id)
 
         if matching_user is None:
             return error_response(message='User not found!', code=404)
@@ -250,7 +249,7 @@ class UserHandler(flask_restplus.Resource):
 
         PS: Login with <a href="v1/oauth_login/google" target="new">google oauth in a new tab</a>.
         """
-        matching_user = get_db().find_by_id(id=id)
+        matching_user = get_colln().find_by_id(id=id)
 
         if matching_user is None:
             return error_response(message='User not found!', code=404)
@@ -266,7 +265,8 @@ class UserHandler(flask_restplus.Resource):
             return error_response(message='Input JSON object does not conform to User.schema: ' + User.schema, code=417)
 
         # Check to see if there are other entries in the database with identical authentication info.
-        matching_users = get_db().get_matching_users_by_auth_infos(user=user)
+        # matching_users = get_db().get_matching_users_by_auth_infos(user=user)
+        matching_users = UsersDbHelper.get_matching_users_by_auth_infos(get_colln(), user)
         if len(matching_users) > 1:
             logging.warning(str(matching_users))
             return error_response(
@@ -275,7 +275,7 @@ class UserHandler(flask_restplus.Resource):
                 code=409)
 
         try:
-            user.update_collection(db_interface=get_db())
+            user.update_collection(get_colln())
         except ValidationError as e:
             import traceback
             error = {
@@ -301,7 +301,7 @@ class UserHandler(flask_restplus.Resource):
 
         PS: Login with <a href="v1/oauth_login/google" target="new">google oauth in a new tab</a>.
         """
-        matching_user = get_db().find_by_id(id=id)
+        matching_user = get_colln().find_by_id(id=id)
 
         if matching_user is None:
             return error_response(message="User not found!", code=404)
@@ -311,7 +311,7 @@ class UserHandler(flask_restplus.Resource):
         logging.info(str(request.json))
         if not is_user_admin() and (session_user is None or session_user._id != matching_user._id):
             return error_response(message="Unauthorized!", code=401)
-        matching_user.delete_in_collection(db_interface=get_db())
+        matching_user.delete_in_collection(get_colln())
         return {}, 200
 
 
@@ -335,7 +335,7 @@ class PasswordLogin(flask_restplus.Resource):
         """
         user_id = request.form.get('user_id')
         user_secret = request.form.get('user_secret')
-        user = get_db().get_user_from_auth_info(auth_info=AuthenticationInfo.from_details(
+        user = UsersDbHelper.get_user_from_auth_info(get_colln(), auth_info=AuthenticationInfo.from_details(
             auth_user_id=user_id,
             auth_provider="vedavaapi"))
         logging.debug(user)
@@ -377,6 +377,7 @@ class LogoutHandler(flask_restplus.Resource):
 
 
 # noinspection PyMethodMayBeStatic
+@api.route('/schemas')
 @api.route('/schemas')
 class SchemaListHandler(flask_restplus.Resource):
     def get(self):

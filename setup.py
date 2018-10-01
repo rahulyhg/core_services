@@ -33,7 +33,7 @@ setup(
   long_description=long_description,
 
   # The project's main homepage.
-  url='https://github.com/vedavaapi/vedavaapi_common',
+  url='https://github.com/vedavaapi/core_services',
 
   # Author details
   author='Sanskrit programmers',
@@ -82,7 +82,7 @@ setup(
   # https://packaging.python.org/en/latest/requirements.html
   install_requires=[
     'flask', 'flask-cors', 'furl', 'flask-restplus', 'flask-oauthlib',
-    'google-services-helper>=1.0.3', 'sanskrit_data',
+    'google-services-helper>=1.0.3', 'sanskrit_data', 'objectdb',
     'jsonpickle', 'jinja2', 'Pillow', 'werkzeug', 'jsonschema', 'requests'
   ],
   # For manual installation, the same list:
