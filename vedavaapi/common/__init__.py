@@ -48,12 +48,19 @@ class ServiceRepo(object):
             self.repo_config = json.loads(open(self.file_store_path('conf', 'config.json'), 'rb').read().decode('utf-8'))
         except FileNotFoundError:
             self.repo_config = {}
+        self.dbs_config = self.service.config.get('dbs', {})
 
     def initialize(self):
         pass
 
     def reset(self):
-        pass
+        for key, val in self.dbs_config.items():
+            db_name = val.get('name', None)
+            if db_name is None:
+                continue
+            self.store.drop_db(self.repo_name, db_name)
+
+        self.store.delete_data(self.repo_name, self.service.name)
 
     def db(self, db_name_suffix):
         return self.store.db(
@@ -74,7 +81,6 @@ class VedavaapiService(object):
 
     instance = None  # reference to singleton instance object of this service.
 
-    config_template = {}
     dependency_services = []
     svc_repo_class = ServiceRepo  # this should be customised by each service to it's specialized repo class
 
@@ -155,7 +161,7 @@ class VedavaapiService(object):
         api_modname = 'vedavaapi.{}.api'.format(self.name)
         try:
             api_mod = __import__(api_modname, globals(), locals(), ["*"])
-        except ModuleNotFoundError as mnfe:
+        except Exception as mnfe:
             return None
 
         import flask  # just to check if an obj is flask.Blueprint obj or not. independent of context

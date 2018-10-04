@@ -33,8 +33,8 @@ def purge_old_repo_specifics():
     session.pop(REPO_ID_KEY, None)
 
 
-@api.route('/repo')
-class Repo(flask_restplus.Resource):
+@api.route('/repos')
+class Repos(flask_restplus.Resource):
     post_parser = api.parser()
     post_parser.add_argument('repo_name', location='form')
 
@@ -59,8 +59,8 @@ class Repo(flask_restplus.Resource):
         return 'repo info deleted.', 200
 
 
-@api.route('/all_repos')
-class AllRepos(flask_restplus.Resource):
+@api.route('/repos/list')
+class ReposList(flask_restplus.Resource):
 
     def get(self):
         return {

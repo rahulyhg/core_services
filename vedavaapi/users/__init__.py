@@ -14,9 +14,9 @@ logging.basicConfig(
 class UsersRepo(ServiceRepo):
     def __init__(self, service, repo_name):
         super(UsersRepo, self).__init__(service, repo_name)
-        self.db_name_suffix = self.service.config.get('users_db')
-        self.users_db = self.db(db_name_suffix=self.db_name_suffix)
-        self.users_colln = self.users_db.get_collection(self.service.config.get('users_primary_colln'))
+        self.users_db_config = self.dbs_config['users_db']
+        self.users_db = self.db(db_name_suffix=self.users_db_config['name'])
+        self.users_colln = self.users_db.get_collection(self.users_db_config['collections']['users'])
 
     def initialize(self):
         initial_users = self.service.config["initial_users"]
@@ -37,11 +37,6 @@ class UsersRepo(ServiceRepo):
                 initial_user.update_collection(self.users_colln)
             else:
                 logging.info("Not adding: " + str(initial_user))
-
-    def reset(self):
-        self.store.drop_db(
-            repo_name=self.repo_name,
-            db_name_suffix=self.db_name_suffix)
 
 
 class VedavaapiUsers(VedavaapiService):

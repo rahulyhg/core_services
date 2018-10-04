@@ -54,6 +54,7 @@
       "user_type": "bot"
     }
   ],
+
   "default_permissions": [
     {
       "actions": [
@@ -64,6 +65,13 @@
       "service": "quotes"
     }
   ],
-  "users_db": "users",
-  "users_primary_colln": "users"
+
+  "dbs": {
+    "users_db": {
+      "name": "users",
+      "collections": {
+        "users": "users"
+      }
+    }
+  }
 }

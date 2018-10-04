@@ -15,13 +15,13 @@ class VedavaapiStore(VedavaapiService):
 
     def __init__(self, registry, name, conf):
         super(VedavaapiStore, self).__init__(registry, name, conf)
-        self.clients = {}
+        self.mydb_clients = {}
         self.default_repo = None
         for repo_name in self.repo_names():
             repo_conf = self._repo_conf(repo_name)
             db_type = repo_conf['db_type']
             # TODO instead should we create client object too for each request?
-            self.clients[repo_name] = self._db_client(
+            self.mydb_clients[repo_name] = self._db_client(
                 db_type,
                 repo_conf[{'couchdb': 'couchdb_host', 'mongo': 'mongo_host'}[db_type]]
             )
@@ -115,9 +115,9 @@ class VedavaapiStore(VedavaapiService):
         db_name = self.db_name(repo_name, db_name_suffix)
         if db_name is None:
             return None
-        return self.clients[repo_name].get_database(db_name)
+        return self.mydb_clients[repo_name].get_database(db_name)
 
     def drop_db(self, repo_name, db_name_suffix):
         db_name = self.db_name(repo_name, db_name_suffix)
-        self.clients[repo_name].drop_database(db_name)
+        self.mydb_clients[repo_name].drop_database(db_name)
 
