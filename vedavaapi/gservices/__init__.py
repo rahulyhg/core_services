@@ -26,7 +26,8 @@ class GservicesRepo(ServiceRepo):
         super(GservicesRepo, self).__init__(service, repo_name)
         self.authorized_creds_path = self.service.registry.lookup('credentials').creds_path(
             repo_name=repo_name,
-            creds_base_path=self.service.config['authorized_creds_base_path'])
+            creds_base_path=self.service.config['authorized_creds_base_path']
+        )
         self.creds_config = load_creds_config(self.authorized_creds_path)
 
     def services(self):
@@ -55,14 +56,21 @@ class VedavaapiGservices(VedavaapiService):
 
     def creds_path(self, repo_name):
         # to be used by it's api
-        return self.get_repo(repo_name).authorized_creds_path
+        if(repo_name is not None):
+            return self.get_repo(repo_name).authorized_creds_path
+        else:
+            return self.registry.lookup('credentials').creds_path(
+                repo_name=None,  # for fallback creds
+                creds_base_path=self.config['authorized_creds_base_path']
+            )
 
     def services(self, repo_name, custom_conf=None):
-        repo = self.get_repo(repo_name)
-        if custom_conf is None:
-            return self.get_repo(repo_name).services()
+        if repo_name is not None:
+            if custom_conf is None:
+                return self.get_repo(repo_name).services()
 
-        effective_conf = load_creds_config(repo.authorized_creds_path)
-        effective_conf.update(custom_conf)
+        effective_conf = load_creds_config(self.creds_path(repo_name=repo_name))
+        if custom_conf is not None:
+            effective_conf.update(custom_conf)
         return GServices.from_creds_file(**effective_conf)
 

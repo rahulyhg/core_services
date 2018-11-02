@@ -173,14 +173,14 @@ class VedavaapiService(object):
             if blueprint not in api_blueprints:
                 api_blueprints.append(blueprint)
 
-        print('service:{}, blueprints:{}'.format(self.name, api_blueprints))
+        # print('service:{}, blueprints:{}'.format(self.name, api_blueprints))
 
         return api_blueprints
 
     def register_api(self, flask_app, url_prefix):
         # host_mod = self._host_module()
         api_blueprints = getattr(self, 'api_blueprints', None)
-        if api_blueprints is None:
+        if api_blueprints is None or not len(api_blueprints):
             logging.info("No API service for service {}".format(self.name))
         for api_blueprint in api_blueprints:
             flask_app.register_blueprint(api_blueprint, url_prefix=url_prefix)
@@ -203,7 +203,7 @@ class VedavaapiServices:
             service_config_file = os.path.join(config_root_dir, 'services', '{service}.json'.format(service=service))
             with open(service_config_file, 'rb') as fhandle:
                 cls.server_config[service] = json.loads(fhandle.read().decode('utf-8'))
-        print(cls.server_config)
+        # print(cls.server_config)
 
     @classmethod
     def register(cls, svcname, service):
@@ -246,13 +246,13 @@ class VedavaapiServices:
         svc.register_api(app, "/{}".format(svcname))
 
 
-def start_app(app, mount_path, services, reset=False):
+def start_app(app, install_path, services, reset=False):
     if not services:
         return
 
-    VedavaapiServices.set_config(install_path=mount_path)
+    VedavaapiServices.set_config(install_path=install_path)
 
-    logging.info("Mount directory path: " + app.root_path)
+    logging.info("install_path: " + app.root_path)
     for svc in services:
         if svc in VedavaapiServices.all_services:
             continue

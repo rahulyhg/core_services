@@ -24,12 +24,13 @@ class VedavaapiCredentials(VedavaapiService):
         self.store = registry.lookup('store')
 
     def creds_path(self, repo_name, creds_base_path, fallback_on_global=True):
-        repo_specific_creds_path = self.get_repo(repo_name).file_store_path(
-            'creds',
-            creds_base_path
-        )
-        if os.path.exists(repo_specific_creds_path):
-            return repo_specific_creds_path
+        if(repo_name is not None):
+            repo_specific_creds_path = self.get_repo(repo_name).file_store_path(
+                'creds',
+                creds_base_path
+            )
+            if os.path.exists(repo_specific_creds_path):
+                return repo_specific_creds_path
 
         if fallback_on_global:
             global_creds_path = os.path.join(self.registry.install_path, 'creds', creds_base_path)  # fallback on global

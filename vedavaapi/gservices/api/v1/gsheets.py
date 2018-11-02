@@ -2,14 +2,16 @@ import requests
 from flask import request
 from flask_restplus import Resource, Namespace, reqparse
 
-from vedavaapi.common.api_common import error_response, get_repo
+from vedavaapi.common.api_common import error_response
 
-from .. import myservice, creds_dict
+from .. import myservice, creds_dict, get_repo
+
 
 def gsheets():
     repo_name = get_repo()
     factory = myservice().services(repo_name)
     return factory.gsheets()
+
 
 gsheets_ns = Namespace('gsheets', description='proxy methods to gsheets')
 

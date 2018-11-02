@@ -2,9 +2,9 @@ import requests
 from flask import request
 from flask_restplus import Resource, Namespace, reqparse
 
-from vedavaapi.common.api_common import error_response, get_repo
+from vedavaapi.common.api_common import error_response
 
-from .. import creds_dict, myservice
+from .. import creds_dict, myservice, get_repo
 
 
 def gdrive():
