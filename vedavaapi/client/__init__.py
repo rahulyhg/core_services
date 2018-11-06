@@ -8,34 +8,34 @@ from sanskrit_data.schema.users import *
 from sanskrit_data.schema.ullekhanam import *
 
 class VedavaapiClient():
-    def __init__(self, base_url, repo_id=None):
-        # we can pass over repo_id in constructor itself, if we want.
+    def __init__(self, base_url, repo_name=None):
+        # we can pass over repo_name in constructor itself, if we want.
         self.baseurl = base_url.rstrip('/')
         self.session = requests.Session()
         self.authenticated = False
-        setted_repo = self.set_repo(repo_id)
-        if repo_id and not setted_repo:
-            raise RuntimeError('setting repo {] failed.'.format(repo_id))
+        setted_repo = self.set_repo(repo_name)
+        if repo_name and not setted_repo:
+            raise RuntimeError('setting repo {} failed.'.format(repo_name))
 
     def authenticate(self, creds=None):
         if self.authenticated or not creds:
             return True
-        print("Authenticating to Vedavaapi Server with username {} and password {}".format(creds.user, creds.passwd))
-        r = self.post("users/v1/password_login", {'user_id' : creds['user'], 'user_secret': creds['passwd'] })
+        print("Authenticating to Vedavaapi Server with username {} and password {}".format(creds['user_id'], creds['user_secret']))
+        r = self.post("users/v1/password_login", {'user_id' : creds['user_id'], 'user_secret': creds['user_secret'] })
         if not r:
             print("Authentication failed.")
         self.authenticated = (r is not None)
         return self.authenticated
 
-    def set_repo(self, repo_id):
-        if not repo_id:
+    def set_repo(self, repo_name):
+        if not repo_name:
             return None
-        r = self.post('store/v1/repo', parms={'repo_id':repo_id})
+        r = self.post('store/v1/repos', parms={'repo_name':repo_name})
         if r is None:
-            logging.error('setting repo_id to {} failed.'.format(repo_id))
+            logging.error('setting repo_name to {} failed.'.format(repo_name))
             return None
-        self.repo_id = repo_id
-        return repo_id
+        self.repo_name = repo_name
+        return repo_name
 
     def get(self, url, parms=None):
         if parms is None:
@@ -90,13 +90,13 @@ default_parms = DotDict({
     'dbgFlag' : True,
     'server_baseurl' : '',
     'auth' : DotDict({'user' : 'vedavaapiAdmin', 'passwd' : '@utoDump1'}),
-    'repo_id' : 'vedavaapi_test'
+    'repo_name' : 'vedavaapi_test'
     })
 
 (cmddir, cmdname) = os.path.split(__file__)
 
 def usage():
-    print(cmdname + " [-r] [-u <userid>:<password>] [-i <repo_id>] <server_baseurl> ...")
+    print(cmdname + " [-r] [-u <userid>:<password>] [-i <repo_name>] <server_baseurl> ...")
     exit(1)
 
 def main(argv):
@@ -114,14 +114,14 @@ def main(argv):
         elif opt in ("-u", "--auth"):
             parms.auth = DotDict(dict(zip(('user', 'passwd'), arg.split(':'))))
             print(parms.auth)
-        elif opt in ("-i", "--repo_id"):
-            parms.repo_id = arg
+        elif opt in ("-i", "--repo_name"):
+            parms.repo_name = arg
 
     if not args:
         usage()
 
     parms.server_baseurl = args[0]
-    client = VedavaapiClient(parms.server_baseurl, parms.repo_id)
+    client = VedavaapiClient(parms.server_baseurl, parms.repo_name)
 
     # First Authenticate with the Vedavaapi Server
     if parms.auth.user:
