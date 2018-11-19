@@ -11,7 +11,7 @@ class VedavaapiStore(VedavaapiService):
     title = 'Vedavaapi Store'
     description = 'service to interact with repo storage and db'
 
-    allowed_file_store_types = ['data', 'conf', 'creds']
+    allowed_file_store_types = ['data', 'conf', 'creds', 'tmp', 'log', 'cache', 'www']
 
     def __init__(self, registry, name, conf):
         super(VedavaapiStore, self).__init__(registry, name, conf)
@@ -65,12 +65,14 @@ class VedavaapiStore(VedavaapiService):
             base_path))
         return requested_path
 
-    def file_store_path(self, repo_name, service_name, file_store_type, base_path):
+    def file_store_path(self, repo_name, service_name, file_store_type, base_path, is_dir=False):
         # our conventional way to get file_path. it creates all directories wanted for leaf.
         requested_path = self._abs_path(repo_name, service_name, file_store_type, base_path)
         # print('requested_path', requested_path)
         if not os.path.exists(os.path.dirname(requested_path)):
             os.makedirs(os.path.dirname(requested_path))
+        if is_dir and not os.path.exists(requested_path):
+            os.makedirs(requested_path)
         return requested_path
 
     def delete_path(self, file_path):

@@ -1,6 +1,7 @@
 import logging
 
 from flask import request
+import flask
 from vedavaapi.common import VedavaapiServices
 
 
@@ -25,8 +26,12 @@ def check_permission(svc_name):
 
 def get_repo():
     # check and retrieve present repo_name
-    import flask
     repo_name = flask.session.get('repo_name', VedavaapiServices.lookup('store').default_repo)
+    check_repo(repo_name)
+    return repo_name
+
+
+def check_repo(repo_name):
     if repo_name is None:
         error = error_response(message='repo not setted', code=404)
         response = flask.make_response(
@@ -42,8 +47,6 @@ def get_repo():
         )
         del flask.session['repo_name']
         flask.abort(response)
-
-    return repo_name
 
 
 def error_response(**kwargs):

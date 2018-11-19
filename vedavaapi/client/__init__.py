@@ -7,10 +7,19 @@ import sanskrit_data.schema.common as common_data_containers
 from sanskrit_data.schema.users import *
 from sanskrit_data.schema.ullekhanam import *
 
+try:
+    from urllib.parse import unquote, quote_plus, urljoin
+except ImportError:  # Python 2
+    # noinspection PyUnresolvedReferences
+    from urllib import unquote, quote_plus
+    # noinspection PyUnresolvedReferences
+    from urlparse import urljoin
+
+
 class VedavaapiClient():
     def __init__(self, base_url, repo_name=None):
         # we can pass over repo_name in constructor itself, if we want.
-        self.baseurl = base_url.rstrip('/')
+        self.baseurl = base_url.rstrip('/') + '/'
         self.session = requests.Session()
         self.authenticated = False
         setted_repo = self.set_repo(repo_name)
@@ -40,7 +49,7 @@ class VedavaapiClient():
     def get(self, url, parms=None):
         if parms is None:
             parms = {}
-        url = self.baseurl + "/" + url
+        url = urljoin(self.baseurl, url)
         print("{} {}".format("GET", url))
         try:
             r = self.session.get(url, params=parms)
@@ -53,7 +62,7 @@ class VedavaapiClient():
     def post(self, url, parms=None, files=None):
         if parms is None:
             parms = {}
-        url = self.baseurl + "/" + url
+        url = urljoin(self.baseurl, url)
         print("{} {}".format("POST", url))
         try:
             #print_dict(parms)
@@ -67,7 +76,7 @@ class VedavaapiClient():
     def delete(self, url, parms=None):
         if parms is None:
             parms = {}
-        url = self.baseurl + "/" + url
+        url = urljoin(self.baseurl, url)
         print("{} {}".format("DELETE", url))
         try:
             r = self.session.delete(url, data=parms)

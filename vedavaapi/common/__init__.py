@@ -215,9 +215,13 @@ class VedavaapiServices:
         return cls.all_services[svcname] if svcname in cls.all_services else None
 
     @classmethod
+    def service_class_name(cls, service_name):
+        return "Vedavaapi" + ''.join(x.capitalize() or '_' for x in service_name.split('_'))
+
+    @classmethod
     def start(cls, app, svcname, reset=False):
         logging.info("Starting vedavaapi.{} service ...".format(svcname))
-        svc_cls = "Vedavaapi" + str.capitalize(svcname)
+        svc_cls = cls.service_class_name(svcname)
         _tmp = __import__('vedavaapi.{}'.format(svcname), globals(), locals(), [svc_cls])
         svc_cls = eval('_tmp.' + svc_cls)
 
