@@ -56,13 +56,15 @@ class VedavaapiStore(VedavaapiService):
             return None
         if file_store_type not in self.allowed_file_store_types:
             return None
+
         requested_path = os.path.normpath(os.path.join(
             self.registry.install_path,
             'repos',
             self._repo_conf(repo_name).get('file_store_base_path'),
             service_name,
             file_store_type,
-            base_path))
+            base_path.lstrip('/')
+        ))
         return requested_path
 
     def file_store_path(self, repo_name, service_name, file_store_type, base_path, is_dir=False):

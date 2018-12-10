@@ -1,6 +1,6 @@
 import logging
 
-from sanskrit_data.schema.users import User
+from sanskrit_ld.schema.users import User
 from vedavaapi.common import VedavaapiService, ServiceRepo
 
 from .helper import UsersDbHelper
@@ -34,7 +34,9 @@ class UsersRepo(ServiceRepo):
             if len(matching_users) == 0:
                 logging.info("Adding: " + str(initial_user))
                 # Use this instead of update_doc to auto-generate auth_secret_bcrypt
-                initial_user.update_collection(self.users_colln)
+                initial_user_json_map = initial_user.to_json_map()
+                res = self.users_colln.find_one_and_update(initial_user_json_map, {'$set': initial_user_json_map}, upsert=True, return_doc='after')
+                print(res, 'res', initial_user_json_map)
             else:
                 logging.info("Not adding: " + str(initial_user))
 

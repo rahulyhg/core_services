@@ -90,7 +90,7 @@ class VedavaapiService(object):
     description = 'A Vedavaapi service'
 
     def __init__(self, registry, name, conf=None):
-        self.registry = registry
+        self.registry = registry  # type: VedavaapiServices
         self.name = name
         self.config = conf if conf is not None else {}
         self.repos = {}
@@ -212,7 +212,7 @@ class VedavaapiServices:
     @classmethod
     def lookup(cls, svcname):
         # print("In lookup({}): {}".format(svcname, cls.all_services))
-        return cls.all_services[svcname] if svcname in cls.all_services else None
+        return cls.all_services[svcname] if svcname in cls.all_services else None  # type: VedavaapiService
 
     @classmethod
     def service_class_name(cls, service_name):

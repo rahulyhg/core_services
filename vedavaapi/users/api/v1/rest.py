@@ -1,19 +1,18 @@
 import logging
 
-import flask_restplus, flask
+import flask
+import flask_restplus
 from flask import session, request, Response
 from furl import furl
 from jsonschema import ValidationError
-from sanskrit_data.schema.common import JsonObject
-import sanskrit_data.schema.common as common_data_containers
-from sanskrit_data.schema.users import AuthenticationInfo, User
+from sanskrit_ld.schema import JsonObject
+from sanskrit_ld.schema.users import AuthenticationInfo, User
 
 from vedavaapi.common.api_common import error_response, get_repo
-
-from ...helper import UsersDbHelper
-from .. import get_colln, myservice
 from . import api
 from .oauth import OAuthClient
+from .. import get_colln, myservice
+from ...helper import UsersDbHelper
 
 
 def redirect_js(next_url):
@@ -84,7 +83,9 @@ class OauthAuthorized(flask_restplus.Resource):
         if next_url is not None:
             next_url_final = furl(next_url)
             if not next_url_final.netloc:
-                return {'message': "logged in successfully, but next_url '{}' is invalid url".format(next_url)}, response_code
+                return {
+                           'message': "logged in successfully, but next_url '{}' is invalid url".format(next_url)
+                       }, response_code
             if not next_url_final.scheme:
                 next_url_final.scheme = "http"
             next_url_final.args["response_code"] = response_code
@@ -95,12 +96,12 @@ class OauthAuthorized(flask_restplus.Resource):
 
 
 def get_user(userinfo, provider_name):
-    user = UsersDbHelper.get_user_from_auth_info(get_colln(), AuthenticationInfo.from_details(auth_user_id=userinfo['email'], auth_provider=provider_name))
+    user = UsersDbHelper.get_user_from_auth_info(get_colln(), AuthenticationInfo.from_details(user_id=userinfo['email'], provider=provider_name))
     print(user)
     if user is None:
         user = User.from_details(
-            auth_infos=[AuthenticationInfo.from_details(auth_user_id=userinfo['email'], auth_provider=provider_name)],
-            user_type='human',
+            agentClass='Person',
+            auth_infos=[AuthenticationInfo.from_details(user_id=userinfo['email'], provider=provider_name)],
             permissions=myservice().get_default_permissions()
         )
     return user
@@ -136,185 +137,6 @@ class CurrentUserHandler(flask_restplus.Resource):
             return [session_user.to_json_map()], 200
 
 
-@api.route('/users')
-class UserListHandler(flask_restplus.Resource):
-    # noinspection PyMethodMayBeStatic
-    @api.doc(responses={
-        200: 'Success.',
-        401: 'Unauthorized - you need to be an admin. Use <a href="../auth/v1/oauth_login/google" target="new">google oauth</a> to login and/ or request access at https://github.com/vedavaapi/vedavaapi_py_api .',
-    })
-    def get(self):
-        """Just list the users.
-
-        PS: Login with <a href="v1/oauth_login/google" target="new">google oauth in a new tab</a>.
-        """
-        if not is_user_admin():
-            return {"message": "Not authorized!"}, 401
-        else:
-            user_list = [user for user in get_colln().find(find_filter={})]
-            logging.debug(user_list)
-            return user_list, 200
-
-    post_parser = api.parser()
-    post_parser.add_argument('jsonStr', location='json', help="Should fit the User schema.")
-
-    @api.expect(post_parser, validate=False)
-    # TODO: The below fails silently. Await response on https://github.com/noirbizarre/flask-restplus/issues/194#issuecomment-284703984 .
-    @api.expect(User.schema, validate=True)
-    @api.doc(responses={
-        200: 'Update success.',
-        401: 'Unauthorized - you need to be an admin. Use <a href="../auth/v1/oauth_login/google" target="new">google oauth</a> to login and request access at https://github.com/vedavaapi/vedavaapi_py_api .',
-        417: 'JSON schema validation error.',
-        409: 'Object with matching info already exists. Please edit that instead or delete it.',
-    })
-    def post(self):
-        """Add a new user, identified by the authentication_infos array.
-
-        PS: Login with <a href="v1/oauth_login/google" target="new">google oauth in a new tab</a>.
-        """
-        logging.info(str(request.json))
-        if not is_user_admin():
-            return error_response(message='User is not an admin!', code=401)
-
-        user = common_data_containers.JsonObject.make_from_dict(request.json)
-        if not isinstance(user, User):
-            return error_response(message='Input JSON object does not conform to User.schema: ' + User.schema, code=417)
-
-        # Check to see if there are other entries in the database with identical authentication info.
-        # matching_users = get_db().get_matching_users_by_auth_infos(user=user)
-        matching_users = UsersDbHelper.get_matching_users_by_auth_infos(get_colln(), user)
-        if len(matching_users) > 0:
-            logging.warning(str(matching_users[0]))
-            return error_response(
-                message='Object with matching info already exists. Please edit that instead or delete it.',
-                matching_user=matching_users[0].to_json_map(),
-                code=409)
-
-        try:
-            user.update_collection(get_colln())
-        except ValidationError as e:
-            import traceback
-            error = {
-                "message": "Some input object does not fit the schema.",
-                "exception_dump": (traceback.format_exc())
-            }
-            return error_response(code=417, **error)
-        return user.to_json_map(), 200
-
-
-@api.route('/users/<string:id>')
-@api.param('id', 'Hint: Get one from the JSON object returned by another GET call. ')
-class UserHandler(flask_restplus.Resource):
-    # noinspection PyMethodMayBeStatic,PyProtectedMember,PyProtectedMember,PyShadowingBuiltins
-    @api.doc(responses={
-        200: 'Success.',
-        401: 'Unauthorized - you need to be an admin, or you need to be accessing your own data. Use <a href="../auth/v1/oauth_login/google" target="new">google oauth</a> to login and request access at https://github.com/vedavaapi/vedavaapi_py_api .',
-        404: 'id not found'
-    })
-    def get(self, id):
-        """Just get the user info.
-
-        PS: Login with <a href="v1/oauth_login/google" target="new">google oauth in a new tab</a>.
-        :param id: String
-        :return: A User object.
-        """
-        matching_user = get_colln().find_by_id(id=id)
-
-        if matching_user is None:
-            return error_response(message='User not found!', code=404)
-
-        session_user = JsonObject.make_from_dict(session.get('user', None))
-
-        if not is_user_admin() and (session_user is None or session_user._id != matching_user._id):
-            return error_response(message='User is not an admin!', code=401)
-
-        return matching_user, 200
-
-    post_parser = api.parser()
-    post_parser.add_argument('jsonStr', location='json')
-
-    # noinspection PyProtectedMember,PyProtectedMember,PyShadowingBuiltins
-    @api.expect(post_parser, validate=False)
-    # TODO: The below fails silently. Await response on https://github.com/noirbizarre/flask-restplus/issues/194#issuecomment-284703984 .
-    @api.expect(User.schema, validate=True)
-    @api.doc(responses={
-        200: 'Update success.',
-        401: 'Unauthorized - you need to be an admin, or you need to be accessing your own data. Use <a href="../auth/v1/oauth_login/google" target="new">google oauth</a> to login and request access at https://github.com/vedavaapi/vedavaapi_py_api .',
-        404: 'id not found',
-        417: 'JSON schema validation error.',
-        409: 'A different object with matching info already exists. Please edit that instead or delete it.',
-    })
-    def post(self, id):
-        """Modify a user.
-
-        PS: Login with <a href="v1/oauth_login/google" target="new">google oauth in a new tab</a>.
-        """
-        matching_user = get_colln().find_by_id(id=id)
-
-        if matching_user is None:
-            return error_response(message='User not found!', code=404)
-
-        session_user = JsonObject.make_from_dict(session.get('user', None))
-
-        logging.info(str(request.json))
-        if not is_user_admin() and (session_user is None or session_user._id != matching_user._id):
-            return error_response(message='Unauthorized!', code=401)
-
-        user = common_data_containers.JsonObject.make_from_dict(request.json)
-        if not isinstance(user, User):
-            return error_response(message='Input JSON object does not conform to User.schema: ' + User.schema, code=417)
-
-        # Check to see if there are other entries in the database with identical authentication info.
-        # matching_users = get_db().get_matching_users_by_auth_infos(user=user)
-        matching_users = UsersDbHelper.get_matching_users_by_auth_infos(get_colln(), user)
-        if len(matching_users) > 1:
-            logging.warning(str(matching_users))
-            return error_response(
-                message='Another object with matching info already exists. Please delete it first.',
-                another_matching_user=str(matching_users),
-                code=409)
-
-        try:
-            user.update_collection(get_colln())
-        except ValidationError as e:
-            import traceback
-            error = {
-                "message": "Some input object does not fit the schema.",
-                "exception_dump": (traceback.format_exc())
-            }
-            return error_response(code=417, **error)
-        return user.to_json_map(), 200
-
-    delete_parser = api.parser()
-
-    # noinspection PyProtectedMember,PyProtectedMember,PyShadowingBuiltins
-    @api.expect(delete_parser, validate=False)
-    # TODO: The below fails silently. Await response on https://github.com/noirbizarre/flask-restplus/issues/194#issuecomment-284703984 .
-    @api.expect(User.schema, validate=True)
-    @api.doc(responses={
-        200: 'Update success.',
-        401: 'Unauthorized - you need to be an admin, or you need to be accessing your own data. Use <a href="../auth/v1/oauth_login/google" target="new">google oauth</a> to login and request access at https://github.com/vedavaapi/vedavaapi_py_api .',
-        404: 'id not found',
-    })
-    def delete(self, id):
-        """Delete a user.
-
-        PS: Login with <a href="v1/oauth_login/google" target="new">google oauth in a new tab</a>.
-        """
-        matching_user = get_colln().find_by_id(id=id)
-
-        if matching_user is None:
-            return error_response(message="User not found!", code=404)
-
-        session_user = JsonObject.make_from_dict(session.get('user', None))
-
-        logging.info(str(request.json))
-        if not is_user_admin() and (session_user is None or session_user._id != matching_user._id):
-            return error_response(message="Unauthorized!", code=401)
-        matching_user.delete_in_collection(get_colln())
-        return {}, 200
-
-
 @api.route('/password_login')
 class PasswordLogin(flask_restplus.Resource):
     post_parser = api.parser()
@@ -336,14 +158,14 @@ class PasswordLogin(flask_restplus.Resource):
         user_id = request.form.get('user_id')
         user_secret = request.form.get('user_secret')
         user = UsersDbHelper.get_user_from_auth_info(get_colln(), auth_info=AuthenticationInfo.from_details(
-            auth_user_id=user_id,
-            auth_provider="vedavaapi"))
+            user_id=user_id,
+            provider="vedavaapi"))
         logging.debug(user)
         if user is None:
             return error_response(message="No such user_id", code=401)
         else:
             authentication_matches = list(
-                filter(lambda info: info.auth_provider == "vedavaapi" and info.check_password(user_secret),
+                filter(lambda info: info.provider == "vedavaapi" and info.check_password(user_secret),
                        user.authentication_infos))
             if not authentication_matches or len(authentication_matches) == 0:
                 return error_response(message="Bad pw", code=401)

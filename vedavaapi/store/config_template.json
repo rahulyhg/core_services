@@ -12,17 +12,17 @@
         "db_prefix": "vedavaapi_test",
         "file_store_base_path": "vedavaapi_test"
     },
-    "vedavaapi_test2": {
+    "raifox_team": {
         "db_type": "mongo",
         "mongo_host": "mongodb://127.0.0.1:27017",
-        "db_prefix": "vedavaapi_test2",
-        "file_store_base_path": "vedavaapi_test2"
+        "db_prefix": "raifox_team",
+        "file_store_base_path": "raifox_team"
     },
-    "lumium_test": {
+    "demo": {
         "db_type": "mongo",
         "mongo_host": "mongodb://127.0.0.1:27017",
-        "db_prefix": "lumium_test",
-        "file_store_base_path": "lumium_test"
+        "db_prefix": "demo",
+        "file_store_base_path": "demo"
     }
   }
 }

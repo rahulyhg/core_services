@@ -9,62 +9,49 @@
   },
   "initial_users": [
     {
+      "jsonClass": "User",
+      "type": "foaf:Agent",
+      "agentClass": "Person",
       "authentication_infos": [
         {
-          "auth_provider": "google",
-          "auth_user_id": "sai.susarla@gmail.com",
-          "jsonClass": "AuthenticationInfo"
+          "jsonClass": "AuthenticationInfo",
+          "type": "owl:Thing",
+          "user_id": "VedavaapiAdmin",
+          "provider": "vedavaapi",
+          "secret_bcrypt": "$2b$12$zZI9xVCrVQfZlCMR1mANZOmmtSNV4hX5GIatXYzQL233.YzUi2Ddu"
         }
       ],
-      "jsonClass": "User",
-      "permissions": [
-        {
-          "actions": [
+      "permissions": {
+        "jsonClass": "UserPermissions",
+        "type": "owl:Thing",
+        "global_scope": {
+          "jsonClass": "Permission",
+          "type": "sld:Permission",
+          "given": [
+            "create",
             "read",
-            "write",
+            "update",
+            "delete",
             "admin"
           ],
-          "jsonClass": "UserPermission",
-          "service": ".*"
+          "withdrawn": []
         }
-      ],
-      "user_type": "human"
-    },
-    {
-      "authentication_infos": [
-        {
-          "auth_provider": "vedavaapi",
-          "auth_user_id": "vedavaapiAdmin",
-          "auth_secret_plain": "@utoDump1",
-          "jsonClass": "AuthenticationInfo"
-        }
-      ],
-      "jsonClass": "User",
-      "permissions": [
-        {
-          "actions": [
-            "read",
-            "write",
-            "admin"
-          ],
-          "jsonClass": "UserPermission",
-          "service": ".*"
-        }
-      ],
-      "user_type": "bot"
+      }
     }
   ],
 
-  "default_permissions": [
-    {
-      "actions": [
-        "read",
-        "write"
+  "default_permissions": {
+    "jsonClass": "UserPermissions",
+    "type": "owl:Thing",
+    "global_scope": {
+      "jsonClass": "Permission",
+      "type": "sld:Permission",
+      "given": [
+        "read"
       ],
-      "jsonClass": "UserPermission",
-      "service": "quotes"
+      "withdrawn": []
     }
-  ],
+  },
 
   "dbs": {
     "users_db": {
