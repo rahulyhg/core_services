@@ -83,7 +83,7 @@ setup(
   install_requires=[
     'flask', 'flask-cors', 'furl', 'flask-restplus', 'flask-oauthlib',
     'google-services-helper>=1.0.3', 'sanskrit_data', 'objectdb',
-    'jsonpickle', 'jinja2', 'Pillow', 'werkzeug', 'jsonschema', 'requests'
+    'jsonpickle', 'jinja2', 'Pillow', 'werkzeug', 'jsonschema', 'requests', 'bcrypt', 'authlib'
   ],
   # For manual installation, the same list:
   # sanskrit_data flask flask-restplus flask-cors flask-oauthlib furl docimage jsonpickle jinja2 opencv-python Pillow werkzeug jsonschema

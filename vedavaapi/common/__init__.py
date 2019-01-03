@@ -8,6 +8,9 @@ import logging
 import os
 import re
 
+from .store_helper import StoreHelper
+
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(levelname)s: %(asctime)s {%(filename)s:%(lineno)d}: %(message)s "
@@ -36,18 +39,18 @@ def unicode_for(string, encoding='utf-8', ensure=False):
             return string
 
 
-class ServiceRepo(object):
-    """
-    interface to repo(file storage, db, etc.), to be specialized for each service according to it's needs
-    """
-    def __init__(self, service, repo_name):
+class OrgHandler(object):
+
+    def __init__(self, service, org_name):
         self.service = service
-        self.store = service.registry.lookup('store')
-        self.repo_name = repo_name
+        self.org_name = org_name
+        self.org_config = self.service.registry.orgs_config[self.org_name]
+        self.store = StoreHelper(self.org_name, self.service.name, self.service.registry)
         try:
-            self.repo_config = json.loads(open(self.file_store_path('conf', 'config.json'), 'rb').read().decode('utf-8'))
+            self.service_org_config = json.loads(
+                open(self.store.file_store_path('conf', 'config.json'), 'rb').read().decode('utf-8'))
         except FileNotFoundError:
-            self.repo_config = {}
+            self.service_org_config = {}
         self.dbs_config = self.service.config.get('dbs', {})
 
     def initialize(self):
@@ -58,22 +61,9 @@ class ServiceRepo(object):
             db_name = val.get('name', None)
             if db_name is None:
                 continue
-            self.store.drop_db(self.repo_name, db_name)
+            self.store.drop_db(db_name)
 
-        self.store.delete_data(self.repo_name, self.service.name)
-
-    def db(self, db_name_suffix):
-        return self.store.db(
-            repo_name=self.repo_name,
-            db_name_suffix=db_name_suffix
-        )
-
-    def file_store_path(self, file_store_type, file_store_base_path):
-        return self.store.file_store_path(
-            self.repo_name,
-            self.service.name,
-            file_store_type or 'data',
-            file_store_base_path)
+        self.store.delete_data()
 
 
 # Base class for all Vedavaapi Service Modules exporting a RESTful API
@@ -82,7 +72,7 @@ class VedavaapiService(object):
     instance = None  # reference to singleton instance object of this service.
 
     dependency_services = []
-    svc_repo_class = ServiceRepo  # this should be customised by each service to it's specialized repo class
+    org_handler_class = OrgHandler  # this should be customised by each service to it's specialized repo class
 
     # title for this service, to be used any where like, api title, etc.
     title = 'Vedavaapi Service'
@@ -93,42 +83,42 @@ class VedavaapiService(object):
         self.registry = registry  # type: VedavaapiServices
         self.name = name
         self.config = conf if conf is not None else {}
-        self.repos = {}
+        self.org_handlers = {}
         self._update_instance_ref(self)
 
     # following are methods dealing with repo, like init, get, reset repo for this service
-    def init_repo(self, repo_name):
+    def init_org(self, org_name):
         """
         initializes repo with given repo_name for this service
-        :param repo_name:
+        :param org_name:
         :return:
         """
-        if repo_name not in self.repos:
-            repo = self.svc_repo_class(self, repo_name)
-            self.repos[repo_name] = repo
-        self.repos[repo_name].initialize()
+        if org_name not in self.org_handlers:
+            org = self.org_handler_class(self, org_name)  # type: OrgHandler
+            self.org_handlers[org_name] = org
+        self.org_handlers[org_name].initialize()
 
-    def get_repo(self, repo_name):
+    def get_org(self, org_name):
         """
         our way to get handle over a repo for this service.
-        :param repo_name:
+        :param org_name:
         :return: repo object corresponding to repo_name, and service
         """
-        if repo_name not in self.repos:
-            self.init_repo(repo_name)
-        return self.repos[repo_name]
+        if org_name not in self.org_handlers:
+            self.init_org(org_name)
+        org_handler = self.org_handlers[org_name]  # type: OrgHandler
+        return org_handler
 
-    def reset_repo(self, repo_name):
+    def reset_org(self, org_name):
         """
         resets the repo
-        :param repo_name:
+        :param org_name:
         :return:
         """
-        if repo_name not in self.repos:
-            repo = self.svc_repo_class(self, repo_name)
-            self.repos[repo_name] = repo
-        self.repos[repo_name].reset()
-
+        if org_name not in self.org_handlers:
+            org = self.org_handler_class(self, org_name)
+            self.org_handlers[org_name] = org
+        self.org_handlers[org_name].reset()
 
     # methods dealing with api plugging.
     @classmethod
@@ -143,7 +133,6 @@ class VedavaapiService(object):
         modname = "vedavaapi.{}".format(self.name)
         mod = __import__(modname, globals(), locals(), ["*"])
         return mod
-
 
     def plug_blueprints(self):
         """
@@ -173,6 +162,9 @@ class VedavaapiService(object):
             if blueprint not in api_blueprints:
                 api_blueprints.append(blueprint)
 
+        blueprints_path_map = getattr(api_mod, 'blueprints_path_map') if hasattr(api_mod, 'blueprints_path_map') else {}
+        self.blueprints_path_map = blueprints_path_map
+
         # print('service:{}, blueprints:{}'.format(self.name, api_blueprints))
 
         return api_blueprints
@@ -183,27 +175,42 @@ class VedavaapiService(object):
         if api_blueprints is None or not len(api_blueprints):
             logging.info("No API service for service {}".format(self.name))
         for api_blueprint in api_blueprints:
-            flask_app.register_blueprint(api_blueprint, url_prefix=url_prefix)
+            blueprint_mount_path = url_prefix + self.blueprints_path_map.get(api_blueprint, '')
+            flask_app.register_blueprint(api_blueprint, url_prefix=blueprint_mount_path)
 
 
 # Registry for all Vedavaapi API-based Service Modules
 class VedavaapiServices:
+    org_names = None
     all_services = {}
     install_path = None
-    server_config = None
+    service_configs = None
 
     @classmethod
-    def set_config(cls, install_path):
+    def initialize(cls, install_path):
         cls.install_path = install_path
+        cls.load_service_configurations()
+        cls.load_orgs_configuration()
+
+    @classmethod
+    def load_service_configurations(cls):
         config_root_dir = os.path.join(cls.install_path, 'conf')
-        cls.server_config = {}
+        cls.service_configs = {}
         services_config_dir = os.path.join(config_root_dir, 'services')
         all_services = [config_file.split('.')[0] for config_file in os.listdir(services_config_dir)]
         for service in all_services:
             service_config_file = os.path.join(config_root_dir, 'services', '{service}.json'.format(service=service))
             with open(service_config_file, 'rb') as fhandle:
-                cls.server_config[service] = json.loads(fhandle.read().decode('utf-8'))
+                cls.service_configs[service] = json.loads(fhandle.read().decode('utf-8'))
         # print(cls.server_config)
+
+    @classmethod
+    def load_orgs_configuration(cls):
+        config_root_dir = os.path.join(cls.install_path, 'conf')
+        orgs_config_file = os.path.join(config_root_dir, 'orgs.json')
+        with open(orgs_config_file, 'rb') as fhandle:
+            cls.orgs_config = json.loads(fhandle.read().decode('utf-8'))
+            cls.org_names = list(cls.orgs_config.keys())
 
     @classmethod
     def register(cls, svcname, service):
@@ -235,15 +242,15 @@ class VedavaapiServices:
         except Exception as e:
             raise e
 
-        svc_conf = cls.server_config[svcname] if svcname in cls.server_config else {}
+        svc_conf = cls.service_configs[svcname] if svcname in cls.service_configs else {}
         svc = svc_cls(cls, svcname, svc_conf)
         cls.register(svcname, svc)
 
         if reset:
             logging.info("Resetting previous state of {} ...".format(svcname))
-            for repo_name in cls.lookup('store').repo_names():
-                svc.reset_repo(repo_name)
-                svc.init_repo(repo_name)
+            for org in cls.org_names:
+                svc.reset_org(org)
+                svc.init_org(org)
             # cls.lookup("store")
         # svc_obj.setup()
         svc.plug_blueprints()
@@ -254,7 +261,7 @@ def start_app(app, install_path, services, reset=False):
     if not services:
         return
 
-    VedavaapiServices.set_config(install_path=install_path)
+    VedavaapiServices.initialize(install_path)
 
     logging.info("install_path: " + app.root_path)
     for svc in services:

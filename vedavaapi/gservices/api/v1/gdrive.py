@@ -2,14 +2,14 @@ import requests
 from flask import request
 from flask_restplus import Resource, Namespace, reqparse
 
-from vedavaapi.common.api_common import error_response
+from vedavaapi.common.api_common import error_response, get_current_org
 
-from .. import creds_dict, myservice, get_repo
+from .. import creds_dict, myservice
 
 
 def gdrive():
-    repo_name = get_repo()
-    factory = myservice().services(repo_name)
+    org_name = get_current_org()
+    factory = myservice().services(org_name)
     return factory.gdrive()
 
 

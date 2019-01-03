@@ -1,31 +1,30 @@
 import os
 
-from vedavaapi.common import VedavaapiService, ServiceRepo
+from vedavaapi.common import VedavaapiService, OrgHandler
 
 
-class CredentialsRepo(ServiceRepo):
+class CredentialsOrgHandler(OrgHandler):
 
-    def __init__(self, service, repo_name):
-        super(CredentialsRepo, self).__init__(service, repo_name)
+    def __init__(self, service, org_name):
+        super(CredentialsOrgHandler, self).__init__(service, org_name)
 
 
 class VedavaapiCredentials(VedavaapiService):
     # service to manage all sorts of credentials, oauth, or else.
     instance = None
 
-    svc_repo_class = CredentialsRepo
-    dependency_services = ['store']
+    org_handler_class = CredentialsOrgHandler
+    dependency_services = []
 
     title = 'VedavaapiCredentials'
     description = 'service to manage all sorts of credentials, and facilitate easy access to them, for other vedavaapi services'
 
     def __init__(self, registry, name, conf):
         super(VedavaapiCredentials, self).__init__(registry, name, conf)
-        self.store = registry.lookup('store')
 
-    def creds_path(self, repo_name, creds_base_path, fallback_on_global=True):
-        if(repo_name is not None):
-            repo_specific_creds_path = self.get_repo(repo_name).file_store_path(
+    def creds_path(self, org_name, creds_base_path, fallback_on_global=True):
+        if org_name is not None:
+            repo_specific_creds_path = self.get_org(org_name).store.file_store_path(
                 'creds',
                 creds_base_path
             )

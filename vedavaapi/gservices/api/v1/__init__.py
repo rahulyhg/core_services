@@ -10,9 +10,8 @@ api = Api(
     app=api_blueprint_v1,
     version='1.0',
     title=myservice().title,
-    prefix='/v1',
     description=myservice().description,
-    doc='/v1'
+    doc='/docs'
 )
 
 

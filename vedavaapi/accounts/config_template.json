@@ -1,0 +1,58 @@
+{
+  "initial_agents": {
+    "users": {
+      "root_admin": {
+
+      }
+    },
+    "groups": {
+      "all_users": {
+        "group_name": "vedavaapi.all.users"
+      },
+      "root_admins": {
+        "group_name": "vedavaapi.root.admins"
+      }
+    },
+    "oauth_clients": {
+      "root_client": {
+        "client_id": "vedavaapi_root_api_client",
+        "client_secret": "kgcwigeiugdfcaygigh112e75gxc76v",
+        "client_name": "vedavaapi root client",
+        "redirect_uris": ["http://localhost:5000/authorizer/v1/oauth_callback/vedavaapi"]
+      }
+    }
+  },
+  "external_oauth_clients": {
+    "google": {
+      "client_secret_file_base_path": "oauth/google/vedavaapi/client0/client_secret.json"
+    },
+    "facebook": {
+      "client_secret_file_base_path": "oauth/facebook/vedavaapi/client0/client_secret.json"
+    }
+  },
+  "dbs": {
+    "users_db": {
+      "name": "users",
+      "collections": {
+        "users": "users",
+        "oauth": "oauth"
+      }
+    }
+  },
+  "authlib": {
+    "OAUTH2_TOKEN_EXPIRES_IN": {
+      "authorization_code": 864000,
+      "implicit": 3600,
+      "password": 864000,
+      "client_credentials": 864000
+    },
+    "OAUTH2_ACCESS_TOKEN_GENERATOR": true,
+    "OAUTH2_REFRESH_TOKEN_GENERATOR": true,
+    "OAUTH2_ERROR_URIS": {},
+    "AUTHLIB_INSECURE_TRANSPORT": "1"
+  },
+  "authorizer": {
+    "sign_in_page_uri": null,
+    "consent_page_uri": null
+  }
+}

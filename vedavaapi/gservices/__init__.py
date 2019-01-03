@@ -1,6 +1,6 @@
 import json
 
-from vedavaapi.common import VedavaapiService, ServiceRepo
+from vedavaapi.common import VedavaapiService, OrgHandler
 from vedavaapi.google_helper import GServices
 
 
@@ -20,12 +20,12 @@ def load_creds_config(creds_path):
         return None
 
 
-class GservicesRepo(ServiceRepo):
+class GservicesOrgHandler(OrgHandler):
 
-    def __init__(self, service, repo_name):
-        super(GservicesRepo, self).__init__(service, repo_name)
+    def __init__(self, service, org_name):
+        super(GservicesOrgHandler, self).__init__(service, org_name)
         self.authorized_creds_path = self.service.registry.lookup('credentials').creds_path(
-            repo_name=repo_name,
+            org_name=org_name,
             creds_base_path=self.service.config['authorized_creds_base_path']
         )
         self.creds_config = load_creds_config(self.authorized_creds_path)
@@ -45,8 +45,8 @@ class VedavaapiGservices(VedavaapiService):
 
     instance = None  # setting again to not fallback on super's
 
-    dependency_services = ['store', 'credentials']
-    svc_repo_class = GservicesRepo
+    dependency_services = ['credentials']
+    org_handler_class = GservicesOrgHandler
 
     title = 'Vedavaapi Gservices'
     description = 'vedavaapi service, for easy interaction with all google api services.'
@@ -54,23 +54,22 @@ class VedavaapiGservices(VedavaapiService):
     def __init__(self, registry, name, conf):
         super(VedavaapiGservices, self).__init__(registry, name, conf)
 
-    def creds_path(self, repo_name):
+    def creds_path(self, org_name):
         # to be used by it's api
-        if(repo_name is not None):
-            return self.get_repo(repo_name).authorized_creds_path
+        if org_name is not None:
+            return self.get_org(org_name).authorized_creds_path
         else:
             return self.registry.lookup('credentials').creds_path(
-                repo_name=None,  # for fallback creds
+                org_name=None,  # for fallback creds
                 creds_base_path=self.config['authorized_creds_base_path']
             )
 
-    def services(self, repo_name, custom_conf=None):
-        if repo_name is not None:
+    def services(self, org_name, custom_conf=None):
+        if org_name is not None:
             if custom_conf is None:
-                return self.get_repo(repo_name).services()
+                return self.get_org(org_name).services()
 
-        effective_conf = load_creds_config(self.creds_path(repo_name=repo_name))
+        effective_conf = load_creds_config(self.creds_path(org_name=org_name))
         if custom_conf is not None:
             effective_conf.update(custom_conf)
         return GServices.from_creds_file(**effective_conf)
-
