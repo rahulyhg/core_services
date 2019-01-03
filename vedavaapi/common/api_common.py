@@ -11,7 +11,7 @@ from vedavaapi.accounts import VedavaapiAccounts
 
 
 def get_current_org():
-    org_name = request.environ['SCRIPT_NAME'][1:]
+    org_name = request.environ['SCRIPT_NAME'].split('/')[-1]
     if not org_name:
         error = error_response(message='resource not found', code=404)
         abort_with_error_response(error)
