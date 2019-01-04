@@ -197,7 +197,7 @@ class VedavaapiServices:
         config_root_dir = os.path.join(cls.install_path, 'conf')
         cls.service_configs = {}
         services_config_dir = os.path.join(config_root_dir, 'services')
-        all_services = [config_file.split('.')[0] for config_file in os.listdir(services_config_dir)]
+        all_services = [config_file.split('.')[0] for config_file in os.listdir(services_config_dir) if config_file.endswith('.json')]
         for service in all_services:
             service_config_file = os.path.join(config_root_dir, 'services', '{service}.json'.format(service=service))
             with open(service_config_file, 'rb') as fhandle:
