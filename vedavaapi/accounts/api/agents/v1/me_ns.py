@@ -1,69 +1,90 @@
+import bcrypt
 import flask_restplus
-from jsonschema import ValidationError
 from sanskrit_ld.schema import JsonObject
-from sanskrit_ld.schema.users import User as _User
-from vedavaapi.common.api_common import error_response, jsonify_argument, check_argument_type, get_current_user_id, get_current_org
+
+from vedavaapi.common.api_common import error_response, jsonify_argument, check_argument_type
+from vedavaapi.common.api_common import get_current_user_id, get_current_org, get_current_user_group_ids
+from vedavaapi.objectdb import objstore_helper
 
 from . import api
 from ... import get_users_colln, sign_out_user
-from ....agents_helpers.models import User
+from ....agents_helpers import users_helper
+from .users_ns import _validate_projection
+
 
 me_ns = api.namespace('me', path='/me', description='personalization namespace')
-
-
-def delete_attrs(obj, attrs):
-    for attr in attrs:
-        if hasattr(obj, attr):
-            delattr(obj, attr)
 
 
 # noinspection PyMethodMayBeStatic
 @me_ns.route('')
 class Me(flask_restplus.Resource):
 
+    get_parser = me_ns.parser()
+    get_parser.add_argument('projection', type=str, location='args')
+
     post_parser = me_ns.parser()
     post_parser.add_argument('update_doc', type=str, location='form', required=True)
+    post_parser.add_argument('return_projection', type=str, location='form')
 
-    presentation_projection = {
-        "permissions": 0,
-        "hashedPassword": 0
-    }
-
+    @me_ns.expect(get_parser, validate=True)
     def get(self):
+        args = self.get_parser.parse_args()
         current_org_name = get_current_org()
         current_user_id = get_current_user_id()
         users_colln = get_users_colln()
 
-        current_user = User.get_user(users_colln, _id=current_user_id, projection=self.presentation_projection)
-        if current_user is None:
+        projection = jsonify_argument(args.get('projection', None), key='projection')
+        check_argument_type(projection, (dict,), key='projection', allow_none=True)
+        _validate_projection(projection)
+        projection = objstore_helper.modified_projection(projection, mandatory_attrs=["_id", "jsonClass"])
+
+        current_user_json = users_colln.find_one(users_helper.get_user_selector_doc(_id=current_user_id), projection=projection)
+        if current_user_json is None:
             sign_out_user(current_org_name)
             return error_response(message='not authorized', code=400)
-        return current_user.to_json_map(), 200
+        return current_user_json, 200
 
     @me_ns.expect(post_parser, validate=True)
     def post(self):
         current_user_id = get_current_user_id()
+        current_user_group_ids = get_current_user_group_ids()
         users_colln = get_users_colln()
         args = self.post_parser.parse_args()
 
         update_doc = jsonify_argument(args['update_doc'], key='update_doc')
         check_argument_type(update_doc, (dict,), key='update_doc')
+        if '_id' not in update_doc:
+            update_doc['_id'] = current_user_id
+        if 'jsonClass' not in update_doc:
+            update_doc['jsonClass'] = 'User'
 
-        diff = JsonObject.make_from_dict(update_doc)
-        check_argument_type(diff, (_User, ), key='update_doc')
-        delete_attrs(diff, ['_id', 'creator', 'created', 'permissions', 'hashedPassword', 'email'])
-        User.swizzle(diff)
+        if update_doc['_id'] != current_user_id:
+            return error_response(message='invalid _id', code=403)
+        if update_doc['jsonClass'] != 'User':
+            return error_response(message='invalid jsonClass', code=403)
+
+        if 'password' in update_doc:
+            update_doc['hashedPassword'] = bcrypt.hashpw(
+                update_doc['password'].encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            update_doc.pop('password')
+
+        return_projection = jsonify_argument(args.get('return_projection', None), key='return_projection')
+        check_argument_type(return_projection, (dict,), key='return_projection', allow_none=True)
+        _validate_projection(return_projection)
+        return_projection = objstore_helper.modified_projection(
+            return_projection, mandatory_attrs=['_id', 'jsonClass'])
 
         try:
-            diff.validate_schema(diff=True)
-        except ValidationError:
-            return error_response(message='arguments are invalid', code=400)
+            user_update = JsonObject.make_from_dict(update_doc)
+            updated_user_id = objstore_helper.update_resource(
+                users_colln, user_update, current_user_id, current_user_group_ids,
+                not_allowed_attributes=('externalAuthentications', 'password'))
+            if updated_user_id is None:
+                raise objstore_helper.ObjModelException('user not exist', 404)
+        except objstore_helper.ObjModelException as e:
+            return error_response(message=e.message, code=e.http_response_code)
+        except ValueError as e:
+            return error_response(message='schema validation error', code=403, details={"error": str(e)})
 
-        modified = User.update_details(users_colln, User.get_user_selector_doc(_id=current_user_id), diff.to_json_map())
-
-        if modified:
-            user = User.get_user(users_colln, _id=current_user_id, projection=self.presentation_projection)
-            return user.to_json_map(), 200
-        else:
-            return error_response(message='error in updating user info', code=400)
-
+        user_json = users_colln.get(current_user_id, projection=return_projection)
+        return user_json

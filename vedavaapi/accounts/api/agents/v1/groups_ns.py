@@ -1,151 +1,261 @@
-import sys
-
 import flask_restplus
+import six
 from jsonschema import ValidationError
+
+from sanskrit_ld.helpers.permissions_helper import PermissionResolver
 from sanskrit_ld.schema import JsonObject
 from sanskrit_ld.schema.base import ObjectPermissions
-from vedavaapi.common.api_common import error_response, jsonify_argument, check_argument_type, abort_with_error_response, get_current_user_id
-from sanskrit_ld.helpers.permissions_helper import PermissionResolver
-from sanskrit_ld.schema.users import UsersGroup as _UserGroup
-from sanskrit_ld.helpers import permissions_helper
 
+from vedavaapi.common.api_common import jsonify_argument, check_argument_type, error_response, abort_with_error_response
+from vedavaapi.common.api_common import get_current_user_id, get_current_user_group_ids
+from vedavaapi.objectdb import objstore_helper
+
+from ....agents_helpers import groups_helper
 from . import api
+from .users_ns import get_requested_agents, _validate_projection
 from ... import get_users_colln, get_initial_agents
-from ....agents_helpers.models import User, UserGroup
 
 
 groups_ns = api.namespace('groups', path='/groups', description='groups namespace')
-
-def delete_attrs(obj, attrs):
-    for attr in attrs:
-        if hasattr(obj, attr):
-            delattr(obj, attr)
-
-
-def check_required_attrs(obj, attrs):
-    for attr in attrs:
-        if not hasattr(obj, attr):
-            error = error_response(message='obj has no required params', code=403)
-            abort_with_error_response(error)
-    return
 
 
 @groups_ns.route('')
 class Groups(flask_restplus.Resource):
 
-    post_parser = groups_ns.parser()
-    post_parser.add_argument('group_doc', type=str, location='form', required=True)
+    get_parser = api.parser()
+    get_parser.add_argument('selector_doc', location='args', type=str, required=True)
+    get_parser.add_argument('projection', location='args', type=str)
+    get_parser.add_argument('start', location='args', type=int)
+    get_parser.add_argument('count', location='args', type=int)
+    get_parser.add_argument('sort_doc', location='args', type=str)
+
+    post_parser = api.parser()
+    post_parser.add_argument('group_json', location='form', type=str, required=True)
+    post_parser.add_argument('return_projection', location='form', type=str)
+
+    @groups_ns.expect(get_parser, validate=True)
+    def get(self):
+        args = self.get_parser.parse_args()
+        users_colln = get_users_colln()
+        current_user_id = get_current_user_id(required=True)
+        current_user_group_ids = get_current_user_group_ids()
+
+        group_jsons = get_requested_agents(
+            args, users_colln, current_user_id, current_user_group_ids,  filter_doc={"jsonClass": "UserGroup"})
+        return group_jsons
 
     @groups_ns.expect(post_parser, validate=True)
     def post(self):
-        current_user_id = get_current_user_id()
         users_colln = get_users_colln()
         args = self.post_parser.parse_args()
+        current_user_id = get_current_user_id(required=True)
+        current_user_group_ids = get_current_user_group_ids()
 
-        groups_doc = jsonify_argument(args['group_doc'], key='group_doc')
-        check_argument_type(groups_doc, (dict,), key='group_doc')
-        group = JsonObject.make_from_dict(groups_doc)
-        check_argument_type(group, (_UserGroup,), key='group_doc')
-        check_required_attrs(group, ['source', 'group_name', 'name'])
+        group_json = jsonify_argument(args['group_json'], key='group_json')
+        check_argument_type(group_json, (dict,), key='group_json')
 
-        current_user = User.get_user(users_colln, _id=current_user_id, projection={"target": 1, "_id": 1})
+        return_projection = jsonify_argument(args.get('return_projection', None), key='return_projection')
+        check_argument_type(return_projection, (dict,), key='return_projection', allow_none=True)
+        _validate_projection(return_projection)
+        return_projection = objstore_helper.modified_projection(
+            return_projection, mandatory_attrs=['_id', 'jsonClass'])
 
-        parent_group = UserGroup.get_group(users_colln, _id=group.source)
-        if not parent_group:
-            return error_response(message='parent group doesn\'t exists', code=403)
+        try:
+            new_group_id = groups_helper.create_new_group(
+                users_colln, group_json, current_user_id, current_user_group_ids, initial_agents=get_initial_agents())
+        except objstore_helper.ObjModelException as e:
+            return error_response(message=e.message, code=e.http_response_code)
+        except ValidationError as e:
+            return error_response(message='invalid schema for group_json', code=403, details={"error": str(e)})
 
-        if not PermissionResolver.resolve_permission(
-                parent_group, ObjectPermissions.LINK_FROM_OTHERS, current_user, users_colln):
-            return error_response(message='permission denied', code=403)
-
-        if UserGroup.group_exists(users_colln, group_name=group.group_name):
-            return error_response(message='group already exists', code=403)
-
-        new_group_id = UserGroup.create_new_group(
-            users_colln, args['group_name'], current_user_id)
-        permissions_helper.add_to_granted_list(
-            users_colln,
-            [new_group_id],
-            ObjectPermissions.ACTIONS,
-            user_pids=[current_user_id],
-            group_pids=[get_initial_agents().root_admins_group_id]
-        )
-        permissions_helper.add_to_granted_list(
-            users_colln, [new_group_id], [ObjectPermissions.LIST, ObjectPermissions.READ], group_pids=[new_group_id])
-
-        User.add_group(users_colln, current_user_id, new_group_id)
-
-        return UserGroup.get_group_json(users_colln, _id=new_group_id), 200
+        new_group_json = users_colln.get(new_group_id, projection=return_projection)
+        return new_group_json
 
 
-@groups_ns.route('/<group_id>')
-class Group(flask_restplus.Resource):
+@groups_ns.route('/<group_identifier>')
+class GroupResource(flask_restplus.Resource):
 
     get_parser = groups_ns.parser()
+    get_parser.add_argument('identifier_type', type=str, location='args', default='_id')
     get_parser.add_argument('projection', type=str, location='args')
 
     post_parser = groups_ns.parser()
+    post_parser.add_argument('identifier_type', type=str, location='form', default='_id')
     post_parser.add_argument('update_doc', type=str, location='form', required=True)
+    post_parser.add_argument('return_projection', type=str, location='form')
+
+    @staticmethod
+    def _group_selector_doc(group_identifier, identifier_type):
+        if identifier_type not in ('_id', 'groupName'):
+            error = error_response(message='invalid identifier_type', code=400)
+            abort_with_error_response(error)
+        return {
+            "_id": groups_helper.get_group_selector_doc(_id=group_identifier),
+            "userName": groups_helper.get_group_selector_doc(group_name=group_identifier)
+        }.get(identifier_type)
 
     @groups_ns.expect(get_parser, validate=True)
-    def get(self, group_id):
-        current_user_id = get_current_user_id()
+    def get(self, group_identifier):
         users_colln = get_users_colln()
-
         args = self.get_parser.parse_args()
-        current_user = User.get_user(users_colln, _id=current_user_id, projection={"target": 1, "_id": 1})
+        current_user_id = get_current_user_id(required=True)
+        current_user_group_ids = get_current_user_group_ids()
 
-        group_permissions_projection = UserGroup.get_group(
-            users_colln, _id=group_id, projection={"permissions": 1, "source": 1, "_id": 1})
-        if group_permissions_projection is None:
-            return error_response(message='group doesn\'t exist', code=404)
-
-        if not PermissionResolver.resolve_permission(
-                group_permissions_projection, ObjectPermissions.READ, current_user, users_colln):
-            return error_response(message='permission denied', code=403)
+        identifier_type = args.get('identifier_type', '_id')
+        group_selector_doc = self._group_selector_doc(group_identifier, identifier_type)
 
         projection = jsonify_argument(args.get('projection', None), key='projection')
-        check_argument_type(projection, [dict], key='projection', allow_none=True)
-        if projection and 0 in projection.values() and 1 in projection.values():
-            return error_response(message='invalid projection', code=400)
+        check_argument_type(projection, (dict,), key='projection', allow_none=True)
+        _validate_projection(projection)
+        projection = objstore_helper.modified_projection(projection, mandatory_attrs=["_id", "jsonClass"])
 
-        return UserGroup.get_group_json(users_colln, _id=group_id, projection=projection), 200
+        group = JsonObject.make_from_dict(users_colln.find_one(group_selector_doc, projection=None))
+        if group is None:
+            return error_response(message='group not found', code=404)
+
+        if not PermissionResolver.resolve_permission(
+                group, ObjectPermissions.READ, current_user_id, current_user_group_ids, users_colln):
+            return error_response(message='permission denied', code=403)
+
+        group_json = group.to_json_map()
+        projected_group_json = objstore_helper.project_doc(group_json, projection)
+        return projected_group_json
 
     @groups_ns.expect(post_parser, validate=True)
-    def post(self, group_id):
-        current_user_id = get_current_user_id()
+    def post(self, group_identifier):
         users_colln = get_users_colln()
-        args = self.post_parser.parse_args()
+        args = self.get_parser.parse_args()
+        current_user_id = get_current_user_id(required=True)
+        current_user_group_ids = get_current_user_group_ids()
 
-        current_user = User.get_user(users_colln, _id=current_user_id, projection={"target": 1, "_id": 1})
-        if current_user is None:
-            return error_response(message='not authorized', code=401)
+        identifier_type = args.get('identifier_type', '_id')
+        group_selector_doc = self._group_selector_doc(group_identifier, identifier_type)
 
         update_doc = jsonify_argument(args['update_doc'], key='update_doc')
         check_argument_type(update_doc, (dict,), key='update_doc')
 
-        group_resource_permissions_projection = UserGroup.get_group(
-            users_colln, _id=group_id, projection={"permissions": 1, "target": 1, "_id": 1})
-        if group_resource_permissions_projection is None:
-            return error_response(message='group resource not found', code=404)
+        if 'jsonClass' not in update_doc:
+            update_doc['jsonClass'] = 'UsersGroup'
+        if update_doc['jsonClass'] != 'UsersGroup':
+            return error_response(message='invalid jsonClass', code=403)
 
-        if not PermissionResolver.resolve_permission(
-                group_resource_permissions_projection,
-                ObjectPermissions.UPDATE_CONTENT, current_user, users_colln):
-            return error_response(message='permission denied', code=403)
+        if identifier_type == '_id':
+            update_doc.pop('groupName', None)
+            if update_doc['_id'] != group_identifier:
+                return error_response(message='invalid user_id', code=403)
+        else:
+            group_id = groups_helper.get_group_id(users_colln, group_identifier)
+            if not group_id:
+                return error_response(message='no group with group_name {}'.format(group_identifier))
+            update_doc['_id'] = group_id
 
-        diff = JsonObject.make_from_dict(update_doc)
-        check_argument_type(diff, (_UserGroup,), key='update_doc')
-        delete_attrs(diff, ['_id', 'creator', 'created', 'permissions', 'groupName'])
+        return_projection = jsonify_argument(args.get('return_projection', None), key='return_projection')
+        check_argument_type(return_projection, (dict,), key='return_projection', allow_none=True)
+        _validate_projection(return_projection)
+        return_projection = objstore_helper.modified_projection(
+            return_projection, mandatory_attrs=['_id', 'jsonClass'])
 
         try:
-            diff.validate_schema(diff=True)
-        except ValidationError:
-            return error_response(message='arguments are invalid', code=400)
+            group_update = JsonObject.make_from_dict(update_doc)
+            updated_group_id = objstore_helper.update_resource(
+                users_colln, group_update, current_user_id, current_user_group_ids,
+                not_allowed_attributes=['members', 'groupName'])
+            if updated_group_id is None:
+                raise objstore_helper.ObjModelException('group not exist', 404)
+        except objstore_helper.ObjModelException as e:
+            return error_response(message=e.message, code=e.http_response_code)
+        except ValueError as e:
+            return error_response(message='schema validation error', code=403, details={"error": str(e)})
 
-        modified = UserGroup.update_details(users_colln, UserGroup.get_group_selector_doc(_id=group_id), diff.to_json_map())
+        group_json = users_colln.find_one(group_selector_doc, projection=return_projection)
+        return group_json
 
-        if modified:
-            return UserGroup.get_group_json(users_colln, _id=group_id, projection={"permissions": 0})
-        else:
-            return error_response(message='error in updating user info', code=400)
+
+@groups_ns.route('/<group_identifier>/members')
+class Members(flask_restplus.Resource):
+
+    get_parser = groups_ns.parser()
+    get_parser.add_argument('identifier_type', type=str, location='args', default='_id')
+
+    post_parser = groups_ns.parser()
+    post_parser.add_argument('identifier_type', type=str, location='form', default='_id')
+    post_parser.add_argument('member_ids', type=str, location='form', required=True)
+
+    delete_parser = groups_ns.parser()
+    delete_parser.add_argument('identifier_type', type=str, location='form', default='_id')
+    delete_parser.add_argument('member_ids', type=str, location='form', required=True)
+
+    @groups_ns.expect(get_parser, validate=True)
+    def get(self, group_identifier):
+        args = self.get_parser.parse_args()
+        users_colln = get_users_colln()
+        current_user_id = get_current_user_id(required=True)
+        current_user_group_ids = get_current_user_group_ids()
+
+        identifier_type = args.get('identifier_type', '_id')
+        # noinspection PyProtectedMember
+        group_selector_doc = GroupResource._group_selector_doc(group_identifier, identifier_type)
+
+        group = JsonObject.make_from_dict(users_colln.find_one(group_selector_doc, projection=None))
+        if group is None:
+            return error_response(message='group not found', code=404)
+
+        if not PermissionResolver.resolve_permission(
+                group, ObjectPermissions.READ, current_user_id, current_user_group_ids, users_colln):
+            return error_response(message='permission denied', code=403)
+
+        member_ids = group.members if hasattr(group, 'members') else []
+        return member_ids
+
+    @groups_ns.expect(post_parser, validate=True)
+    def post(self, group_identifier):
+        args = self.post_parser.parse_args()
+        users_colln = get_users_colln()
+        current_user_id = get_current_user_id(required=True)
+        current_user_group_ids = get_current_user_group_ids()
+
+        identifier_type = args.get('identifier_type', '_id')
+        group_selector_doc = GroupResource._group_selector_doc(group_identifier, identifier_type)
+
+        user_ids = jsonify_argument(args['member_ids'], key='member_ids')
+        check_argument_type(user_ids, (list, ), key='member_ids')
+        for user_id in user_ids:
+            if not isinstance(user_id, six.string_types):
+                return error_response(message='invalid user_ids', code=400)
+
+        try:
+            # noinspection PyUnusedLocal
+            modified_count = groups_helper.add_users_to_group(
+                users_colln, group_selector_doc, user_ids, current_user_id, current_user_group_ids)
+        except objstore_helper.ObjModelException as e:
+            return error_response(message=e.message, code=e.http_response_code)
+
+        member_ids = users_colln.find_one(group_selector_doc, projection={"members": 1}).get('members', [])
+        return member_ids
+
+    @groups_ns.expect(delete_parser, validate=True)
+    def delete(self, group_identifier):
+        args = self.delete_parser.parse_args()
+        users_colln = get_users_colln()
+        current_user_id = get_current_user_id(required=True)
+        current_user_group_ids = get_current_user_group_ids()
+
+        identifier_type = args.get('identifier_type', '_id')
+        # noinspection PyProtectedMember
+        group_selector_doc = GroupResource._group_selector_doc(group_identifier, identifier_type)
+
+        user_ids = jsonify_argument(args['member_ids'], key='member_ids')
+        check_argument_type(user_ids, (list,), key='member_ids')
+        for user_id in user_ids:
+            if not isinstance(user_id, six.string_types):
+                return error_response(message='invalid user_ids', code=400)
+
+        try:
+            # noinspection PyUnusedLocal
+            modified_count = groups_helper.remove_users_from_group(
+                users_colln, group_selector_doc, user_ids, current_user_id, current_user_group_ids)
+        except objstore_helper.ObjModelException as e:
+            return error_response(message=e.message, code=e.http_response_code)
+
+        member_ids = users_colln.find_one(group_selector_doc, projection={"members": 1}).get('members', [])
+        return member_ids

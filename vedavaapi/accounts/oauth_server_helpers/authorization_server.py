@@ -1,11 +1,11 @@
 from collections import namedtuple
 
-from authlib.specs.rfc6749.grants import ImplicitGrant, ClientCredentialsGrant
+from authlib.specs.rfc6749.grants import ImplicitGrant
 from authlib.flask.oauth2.authorization_server import AuthorizationServer as _AuthorizationServer
 
 
 from .models import create_query_client_func, create_save_token_func
-from .grants import AuthorizationCodeGrant, RefreshTokenGrant, PasswordGrant
+from .grants import AuthorizationCodeGrant, RefreshTokenGrant, PasswordGrant, ClientCredentialsGrant
 
 
 class AuthorizationServer(_AuthorizationServer):

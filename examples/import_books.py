@@ -111,7 +111,7 @@ def main(argv):
                 pages.append(('in_files', \
                     open(os.path.join(book.content.path, page.content.path), 'rb')))
             #print_dict(book.content.to_json_map())
-            r = vvclient.post("ullekhanam/v1/dbs/{}/books".format(Parms.dbname), parms={'book_json' : json.dumps(book.content.to_json_map())}, files=pages)
+            r = vvclient.post("ullekhanam/v1/dbs/{}/books".format(Parms.dbname), data={'book_json' : json.dumps(book.content.to_json_map())}, files=pages)
             if not r:
                 sys.exit(1)
             book_json = json.loads(r.text)

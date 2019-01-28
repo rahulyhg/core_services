@@ -23,13 +23,14 @@ def get_current_user_id():
 
 
 def sign_out_user(org_name):
+    print(session, org_name)
     if not session.get('authentications', None):
         return None
-    authentications = session['authentications']
-    if not authentications.get(org_name, None):
+    if org_name not in session['authentications']:
         return None
-    return authentications.pop(org_name, None)
-
+    authentication = session['authentications'].pop(org_name)
+    session.modified = True
+    return authentication
 
 def get_users_colln():
     org_name = get_current_org()
@@ -63,15 +64,17 @@ def require_oauth(scope=None, operator='AND', optional=False):
     def wrapper(f):
         @functools.wraps(f)
         def decorated(*args, **kwargs):
-            # org_name = get_current_repo()
-            resource_protector = myservice().get_resource_protector('vedavaapi')
+            current_org_name = get_current_org()
+            resource_protector = myservice().get_resource_protector(current_org_name)
             try:
                 resource_protector.acquire_token(scope, operator)
             except MissingAuthorizationError as error:
+                print(error)
                 if optional:
                     return f(*args, **kwargs)
                 resource_protector.raise_error_response(error)
             except OAuth2Error as error:
+                print(error)
                 resource_protector.raise_error_response(error)
             return f(*args, **kwargs)
         return decorated

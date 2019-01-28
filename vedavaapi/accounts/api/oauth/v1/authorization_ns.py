@@ -1,21 +1,20 @@
 import sys
 
 import flask
+from flask import session, request, Response
 import flask_restplus
 import furl
 from authlib.flask.oauth2 import current_token
 from authlib.specs.rfc6749 import OAuth2Error
-from flask import session, request, Response
-from sanskrit_ld.helpers import permissions_helper
-from sanskrit_ld.schema.base import ObjectPermissions
-from sanskrit_ld.schema import WrapperObject
-from vedavaapi.common.api_common import error_response, abort_with_error_response
+
+from vedavaapi.common.api_common import error_response, abort_with_error_response, get_current_org
 
 from . import api
-from ... import get_users_colln, get_authlib_authorization_server, get_authorizer_config, require_oauth, \
-    get_current_user_id, get_current_org, sign_out_user, myservice, get_initial_agents
-from ....agents_helpers.models import User
+from ... import get_users_colln, get_authlib_authorization_server, get_authorizer_config, require_oauth
+from ... import get_current_user_id, sign_out_user, myservice, get_initial_agents
+
 from ....agents_helpers.oauth_client_helper import OauthClientsRegistry, OAuthClient
+from ....agents_helpers import users_helper
 
 
 authorization_ns = api.namespace('authorization', path='/')
@@ -58,7 +57,7 @@ class Authorizer(flask_restplus.Resource):
         args = self.get_parser.parse_args()
         current_user_id = get_current_user_id()
         users_colln = get_users_colln()
-        current_user = User.get_user(users_colln, _id=current_user_id)
+        current_user = users_helper.get_user(users_colln, users_helper.get_user_selector_doc(_id=current_user_id))
 
         authorization_server = get_authlib_authorization_server()
         try:
@@ -83,10 +82,12 @@ class Authorizer(flask_restplus.Resource):
     @authorization_ns.expect(post_parser, validate=True)
     def post(self):
         # TODO referer/origin should be checked
+        # noinspection PyUnusedLocal
         args = self.post_parser.parse_args()
-        current_user_id = get_current_user_id()
         users_colln = get_users_colln()
-        current_user = User.get_user(users_colln, _id=current_user_id)
+        current_user_id = get_current_user_id()
+        current_user = users_helper.get_user(users_colln, users_helper.get_user_selector_doc(current_user_id))
+
         if not current_user:
             return error_response(message='invalid request', code=400)
 
@@ -110,13 +111,14 @@ class SignIn(flask_restplus.Resource):
         email = args.get('email')
         password = args.get('password')
 
-        user = User.get_user(users_colln, email=email)
+        user_selector_doc = users_helper.get_user_selector_doc(email=email)
+        user = users_helper.get_user(users_colln, user_selector_doc, projection={"_id": 1, "hashedPassword": 1})
         if user is None:
             return error_response(message='user not found', code=401)
 
         if not hasattr(user, 'hashedPassword'):
             return error_response(message='user doesn\'t have vedavaapi account', code=403)
-        if not user.check_password(password):
+        if not users_helper.check_password(user, password):
             return error_response(message='incorrect password', code=401)
 
         current_org = get_current_org()
@@ -193,34 +195,21 @@ class OAuthCallback(flask_restplus.Resource):
             )
         auth_info = oauth_client.normalized_user_info(userinfo)
 
-        user = User.get_user(users_colln, email=auth_info.email, projection={"_id": 1})
-        if user is None:
-            user = User()
-            user.set_from_dict({
-                "email": auth_info.email,
-                "externalAuthentications": WrapperObject()
-            })
-            user_id = User.create_new_user(users_colln, doc=user)
-            user._id = user_id
+        user_selector_doc = users_helper.get_user_selector_doc(email=auth_info.email)
+        user_id = users_helper.get_user_id(users_colln, auth_info.email)
+        if user_id is None:
+            user_json = {
+                "jsonClass": "User",
+                "email": auth_info.email
+            }
+            user_id = users_helper.create_new_user(
+                users_colln, user_json, initial_agents=get_initial_agents(), with_password=False)
 
-            initial_agents = get_initial_agents()
-            User.add_group(
-                users_colln, User.get_user_selector_doc(_id=user_id), initial_agents.all_users_group_id)
-            permissions_helper.add_to_granted_list(
-                users_colln, [user_id], ObjectPermissions.ACTIONS, group_pids=[initial_agents.root_admins_group_id])
-
-            permissions_helper.add_to_granted_list(
-                users_colln, [user_id],
-                [ObjectPermissions.READ, ObjectPermissions.UPDATE_CONTENT, ObjectPermissions.DELETE],
-                user_pids=[user_id]
-            )
-
-        User.add_external_authentications(users_colln, User.get_user_selector_doc(_id=user._id), auth_info)
+        users_helper.add_external_authentication(users_colln, user_selector_doc, auth_info)
 
         current_org = get_current_org()
         session['authentications'] = session.get('authentications', {})
-        # noinspection PyProtectedMember
-        session['authentications'][current_org] = {"user_id": user._id}
+        session['authentications'][current_org] = {"user_id": user_id, "provider_name": "google"}
 
         return redirect_js_response(
             args.get('redirect_url', None), 'sign in successful', 'sign in successful, but redirect uri is invalid')
@@ -233,7 +222,7 @@ class SignOut(flask_restplus.Resource):
     def get(self):
         current_authentication_details = sign_out_user(get_current_org())
         if not current_authentication_details:
-            return error_response(message='not signed in', code=200)
+            return error_response(message='not signed in', code=401)
         return {"message": "signout successful"}, 200
 
 
@@ -262,6 +251,7 @@ class TokenResolver(flask_restplus.Resource):
     @require_oauth()
     def get(self):
         token = current_token
+        print(current_token)
         users_colln = get_users_colln()
         args = self.get_parser.parse_args()
 
@@ -271,7 +261,10 @@ class TokenResolver(flask_restplus.Resource):
             "user_id": token.user_id
         }
         if args.get('include_user', False):
-            user = User.get_user(users_colln, _id=token.user_id, projection={"permissions": 0, "hashedPassword": 0})
+            user = users_helper.get_user(
+                users_colln, users_helper.get_user_selector_doc(_id=token.user_id),
+                projection={"permissions": 0, "hashedPassword": 0}
+            )
             response['user'] = user.to_json_map()
 
         return response, 200

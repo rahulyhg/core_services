@@ -21,7 +21,7 @@ $(function() {
             window.location.replace(fullConsentUrl);
         }
         else {
-            $("#login-success-status").text("log in successfull.");
+            $("#login-success-status").text("log in successful.");
         }
     }
 

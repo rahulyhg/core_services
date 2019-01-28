@@ -1,5 +1,6 @@
+import logging
+
 import requests
-from sanskrit_data.schema.ullekhanam import *
 
 try:
     from urllib.parse import unquote, quote_plus, urljoin
@@ -13,13 +14,13 @@ except ImportError:  # Python 2
 class VedavaapiClient(object):
     def __init__(self, base_url, org_name='vedavaapi'):
         # we can pass over repo_name in constructor itself, if we want.
-        self.baseurl = base_url.rstrip('/') + '/'
+        self.base_url = base_url.rstrip('/') + '/'
         self.org_name = org_name
         self.session = requests.Session()
         self.authenticated = False
 
     def abs_url(self, url_part):
-        return urljoin(urljoin(self.baseurl, self.org_name + '/'), url_part)
+        return urljoin(urljoin(self.base_url, self.org_name + '/'), url_part)
 
     def authenticate(self, creds=None):
         if self.authenticated or not creds:
@@ -32,6 +33,23 @@ class VedavaapiClient(object):
             print("Authentication failed.")
         self.authenticated = (r is not None)
         return self.authenticated
+
+    def authorize(self, token_uri, client_id, client_secret):
+        """
+        presently only client_credentials grant type supported
+        :param token_uri:
+        :param client_id:
+        :param client_secret:
+        :return:
+        """
+        request_data = {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "grant_type": "client_credentials"
+        }
+        atr = requests.post(token_uri.format(org_name=self.org_name), data=request_data)
+        return atr.json()
+
 
     def get(self, url, parms=None):
         if parms is None:
@@ -46,14 +64,14 @@ class VedavaapiClient(object):
             logging.error("GET on {} returned {}".format(url, e))
             return None
 
-    def post(self, url, parms=None, files=None):
-        if parms is None:
-            parms = {}
+    def post(self, url, data=None, files=None):
+        if data is None:
+            data = {}
         url = self.abs_url(url)
         print("{} {}".format("POST", url))
         try:
             # print_dict(parms)
-            r = self.session.post(url, data=parms, files=files)
+            r = self.session.post(url, data=data, files=files)
             r.raise_for_status()
             return r
         except Exception as e:

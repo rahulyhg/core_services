@@ -1,5 +1,4 @@
 import json
-import logging
 import sys
 
 import requests
@@ -15,21 +14,39 @@ def get_current_org():
     if not org_name:
         error = error_response(message='resource not found', code=404)
         abort_with_error_response(error)
+    if org_name not in flask.current_app.config.get('ORGS', {}):
+        error = error_response(message='resource not found', code=404)
+        abort_with_error_response(error)
     return org_name
 
 
-def get_current_user_id(required=True):
+def get_current_user_id(required=False):
     authentications = session.get('authentications', {})
     current_org_name = get_current_org()
-    if not current_org_name in authentications:
+    if current_org_name not in authentications:
         if required:
-            error = error_response(message='you should sign in to perform this action', code=404)
+            error = error_response(message='not authorized', code=401)
             abort_with_error_response(error)
         return None
     return authentications[current_org_name]["user_id"]
 
+def get_current_user_group_ids():
+    current_user_id = get_current_user_id()
+    return get_group_ids(get_current_org(), current_user_id)
 
-def get_user(org_name, _id, projection=None, raise_if_not_exists=True):
+def get_group_ids(org_name, user_id):
+    accounts_service = VedavaapiServices.lookup('accounts')  # type: VedavaapiAccounts
+    users_colln = accounts_service.get_users_colln(org_name)
+
+    group_ids = [
+        group['_id'] for group in users_colln.find(
+            {"jsonClass": "UsersGroup", "members": user_id}, projection={"_id": 1}
+        )
+    ]
+    return group_ids
+
+
+def get_user(org_name, user_id, projection=None, raise_if_not_exists=True):
     accounts_service = VedavaapiServices.lookup('accounts')  # type: VedavaapiAccounts
     users_colln = accounts_service.get_users_colln(org_name)
     if projection is not None:
@@ -38,21 +55,12 @@ def get_user(org_name, _id, projection=None, raise_if_not_exists=True):
         else:
             projection.update({"jsonClass": 1})
 
-    user_json = users_colln.get(_id, projection=projection)
+    user_json = users_colln.get(user_id, projection=projection)
     if raise_if_not_exists and user_json is None:
         error = error_response(message='invalid user', code=400)
         abort_with_error_response(error)
 
     return JsonObject.make_from_dict(user_json)
-
-
-def sign_out_user(org_name):
-    if not session.get('authentications', None):
-        return None
-    authentications = session['authentications']
-    if not authentications.get(org_name, None):
-        return None
-    return authentications.pop(org_name, None)
 
 
 def get_initial_agents():
@@ -134,11 +142,7 @@ def resolve_token(resolve_token_uri, include_user=False, required_scopes=None, o
     return token_info
 
 
-def abort_with_error_response(error):
-    response = flask.make_response(
-        flask.jsonify(error[0]),  # json
-        error[1]  # code
-    )
+def abort_with_error_response(response):
     flask.abort(response)
 
 
@@ -151,4 +155,8 @@ def error_response(**kwargs):
         inherited_error_response = kwargs['inherited_error_response']
         error['code'] = inherited_error_response['error'].get('code', 500)
     error.update(kwargs)
-    return {'jsonClass': 'Error', 'error': error}, error['code']
+    response = flask.make_response(
+        flask.jsonify(error),  # json
+        error['code']  # code
+    )
+    return response

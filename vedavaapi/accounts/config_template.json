@@ -23,12 +23,7 @@
     }
   },
   "external_oauth_clients": {
-    "google": {
-      "client_secret_file_base_path": "oauth/google/vedavaapi/client0/client_secret.json"
-    },
-    "facebook": {
-      "client_secret_file_base_path": "oauth/facebook/vedavaapi/client0/client_secret.json"
-    }
+
   },
   "dbs": {
     "users_db": {

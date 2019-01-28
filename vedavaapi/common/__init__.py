@@ -150,7 +150,7 @@ class VedavaapiService(object):
         api_modname = 'vedavaapi.{}.api'.format(self.name)
         try:
             api_mod = __import__(api_modname, globals(), locals(), ["*"])
-        except Exception as mnfe:
+        except ModuleNotFoundError as mnfe:
             return None
 
         import flask  # just to check if an obj is flask.Blueprint obj or not. independent of context
@@ -196,10 +196,10 @@ class VedavaapiServices:
     def load_service_configurations(cls):
         config_root_dir = os.path.join(cls.install_path, 'conf')
         cls.service_configs = {}
-        services_config_dir = os.path.join(config_root_dir, 'services')
+        services_config_dir = os.path.join(config_root_dir, '_services')
         all_services = [config_file.split('.')[0] for config_file in os.listdir(services_config_dir) if config_file.endswith('.json')]
         for service in all_services:
-            service_config_file = os.path.join(config_root_dir, 'services', '{service}.json'.format(service=service))
+            service_config_file = os.path.join(config_root_dir, '_services', '{service}.json'.format(service=service))
             with open(service_config_file, 'rb') as fhandle:
                 cls.service_configs[service] = json.loads(fhandle.read().decode('utf-8'))
         # print(cls.server_config)
@@ -263,7 +263,6 @@ def start_app(app, install_path, services, reset=False):
 
     VedavaapiServices.initialize(install_path)
 
-    logging.info("install_path: " + app.root_path)
     for svc in services:
         if svc in VedavaapiServices.all_services:
             continue

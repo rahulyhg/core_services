@@ -1,0 +1,14 @@
+{
+  "oauth": {
+    "google": {
+      "client_secret_file_base_path": "oauth/google/vedavaapi/client1/client_secret.json"
+    },
+    "facebook": {
+      "client_secret_file_base_path": "oauth/facebook/vedavaapi/client0/client_secret.json"
+    },
+    "vedavaapi": {
+      "client_secret_file_base_path": "oauth/vedavaapi/root/client0/client_secret.json",
+      "userinfo_api_endpoint": "http://localhost:5000/accounts/oauth/v1/resolve_token"
+    }
+  }
+}

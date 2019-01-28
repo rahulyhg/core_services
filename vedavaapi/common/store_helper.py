@@ -22,7 +22,7 @@ class StoreHelper(object):
 
         requested_path = os.path.normpath(os.path.join(
             self.registry.install_path,
-            'orgs',
+            '_orgs',
             self.org_config.get('file_store_base_path'),
             self.service_name,
             file_store_type,

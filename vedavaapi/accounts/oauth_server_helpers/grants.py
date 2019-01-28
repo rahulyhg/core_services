@@ -76,6 +76,8 @@ class PasswordGrant(grants.ResourceOwnerPasswordCredentialsGrant):
 
 class RefreshTokenGrant(grants.RefreshTokenGrant):
 
+    TOKEN_ENDPOINT_AUTH_METHODS = ['client_secret_post', 'client_secret_basic']
+
     def __init__(self, request, server):
         super(RefreshTokenGrant, self).__init__(request, server)
         self.oauth_colln = self.server.oauth_colln
@@ -92,3 +94,8 @@ class RefreshTokenGrant(grants.RefreshTokenGrant):
         user = users_helper.get_user(self.users_colln, _id=credential.user_id)
         UserModel.cast(user)
         return user
+
+
+class ClientCredentialsGrant(grants.ClientCredentialsGrant):
+    TOKEN_ENDPOINT_AUTH_METHODS = ['client_secret_post', 'client_secret_basic']
+    pass
