@@ -28,7 +28,7 @@ def _validate_projection(projection):
 
 
 def get_requested_agents(args, colln, user_id, group_ids, filter_doc=None):
-    selector_doc = jsonify_argument(args['selector_doc'], key='selector_doc')
+    selector_doc = jsonify_argument(args.get('selector_doc', None), key='selector_doc') or {}
     check_argument_type(selector_doc, (dict,), key='selector_doc')
     if filter_doc is not None:
         selector_doc.update(filter_doc)
@@ -70,7 +70,7 @@ def get_requested_agents(args, colln, user_id, group_ids, filter_doc=None):
 class Users(flask_restplus.Resource):
 
     get_parser = api.parser()
-    get_parser.add_argument('selector_doc', location='args', type=str, required=True)
+    get_parser.add_argument('selector_doc', location='args', type=str, default='{}')
     get_parser.add_argument('projection', location='args', type=str)
     get_parser.add_argument('start', location='args', type=int)
     get_parser.add_argument('count', location='args', type=int)

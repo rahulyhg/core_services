@@ -36,7 +36,8 @@ def get_user(users_colln, user_selector_doc, projection=None):
 
 def project_user_json(user_json, projection=None):
     user_exposed_projection = objstore_helper.modified_projection(
-        user_json.get('exposed_projection', None), mandatory_attrs=['_id', 'jsonClass'])
+        user_json.get('exposed_projection', None), mandatory_attrs=['_id', 'jsonClass']) or {}
+    user_exposed_projection = objstore_helper.get_restricted_projection(user_exposed_projection, {"hashedPassword": 0})
     projected_user_json = objstore_helper.project_doc(
         user_json, objstore_helper.get_restricted_projection(projection, user_exposed_projection))
     return projected_user_json

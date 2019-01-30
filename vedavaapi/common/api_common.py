@@ -46,7 +46,7 @@ def get_group_ids(org_name, user_id):
     return group_ids
 
 
-def get_user(org_name, user_id, projection=None, raise_if_not_exists=True):
+def get_user(org_name, user_id, projection=None):
     accounts_service = VedavaapiServices.lookup('accounts')  # type: VedavaapiAccounts
     users_colln = accounts_service.get_users_colln(org_name)
     if projection is not None:
@@ -56,11 +56,22 @@ def get_user(org_name, user_id, projection=None, raise_if_not_exists=True):
             projection.update({"jsonClass": 1})
 
     user_json = users_colln.get(user_id, projection=projection)
-    if raise_if_not_exists and user_json is None:
-        error = error_response(message='invalid user', code=400)
-        abort_with_error_response(error)
 
     return JsonObject.make_from_dict(user_json)
+
+
+def get_group(org_name, group_id, projection=None):
+    accounts_service = VedavaapiServices.lookup('accounts')  # type: VedavaapiAccounts
+    users_colln = accounts_service.get_users_colln(org_name)
+    if projection is not None:
+        if 0 in projection.values():
+            projection.pop('jsonClass', None)
+        else:
+            projection.update({"jsonClass": 1})
+
+    group_json = users_colln.get(group_id, projection=projection)
+
+    return JsonObject.make_from_dict(group_json)
 
 
 def get_initial_agents():

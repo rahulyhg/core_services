@@ -23,7 +23,7 @@ groups_ns = api.namespace('groups', path='/groups', description='groups namespac
 class Groups(flask_restplus.Resource):
 
     get_parser = api.parser()
-    get_parser.add_argument('selector_doc', location='args', type=str, required=True)
+    get_parser.add_argument('selector_doc', location='args', type=str, default='{}')
     get_parser.add_argument('projection', location='args', type=str)
     get_parser.add_argument('start', location='args', type=int)
     get_parser.add_argument('count', location='args', type=int)
@@ -41,7 +41,7 @@ class Groups(flask_restplus.Resource):
         current_user_group_ids = get_current_user_group_ids()
 
         group_jsons = get_requested_agents(
-            args, users_colln, current_user_id, current_user_group_ids,  filter_doc={"jsonClass": "UserGroup"})
+            args, users_colln, current_user_id, current_user_group_ids,  filter_doc={"jsonClass": "UsersGroup"})
         return group_jsons
 
     @groups_ns.expect(post_parser, validate=True)
@@ -76,11 +76,11 @@ class Groups(flask_restplus.Resource):
 class GroupResource(flask_restplus.Resource):
 
     get_parser = groups_ns.parser()
-    get_parser.add_argument('identifier_type', type=str, location='args', default='_id')
+    get_parser.add_argument('identifier_type', type=str, location='args', default='_id', choices=['_id', 'groupName'])
     get_parser.add_argument('projection', type=str, location='args')
 
     post_parser = groups_ns.parser()
-    post_parser.add_argument('identifier_type', type=str, location='form', default='_id')
+    post_parser.add_argument('identifier_type', type=str, location='form', default='_id', choices=['_id', 'groupName'])
     post_parser.add_argument('update_doc', type=str, location='form', required=True)
     post_parser.add_argument('return_projection', type=str, location='form')
 
@@ -175,14 +175,14 @@ class GroupResource(flask_restplus.Resource):
 class Members(flask_restplus.Resource):
 
     get_parser = groups_ns.parser()
-    get_parser.add_argument('identifier_type', type=str, location='args', default='_id')
+    get_parser.add_argument('identifier_type', type=str, location='args', default='_id', choices=['_id', 'groupName'])
 
     post_parser = groups_ns.parser()
-    post_parser.add_argument('identifier_type', type=str, location='form', default='_id')
+    post_parser.add_argument('identifier_type', type=str, location='form', default='_id', choices=['_id', 'groupName'])
     post_parser.add_argument('member_ids', type=str, location='form', required=True)
 
     delete_parser = groups_ns.parser()
-    delete_parser.add_argument('identifier_type', type=str, location='form', default='_id')
+    delete_parser.add_argument('identifier_type', type=str, location='form', default='_id', choices=['_id', 'groupName'])
     delete_parser.add_argument('member_ids', type=str, location='form', required=True)
 
     @groups_ns.expect(get_parser, validate=True)
@@ -215,6 +215,7 @@ class Members(flask_restplus.Resource):
         current_user_group_ids = get_current_user_group_ids()
 
         identifier_type = args.get('identifier_type', '_id')
+        # noinspection PyProtectedMember
         group_selector_doc = GroupResource._group_selector_doc(group_identifier, identifier_type)
 
         user_ids = jsonify_argument(args['member_ids'], key='member_ids')
