@@ -20,6 +20,9 @@ def bootstrap_initial_agents(users_colln, oauth_colln, initial_agents_config):
     all_users_conf = initial_agents_config['groups']['all_users']
     all_users_group_id = create_all_users_group(users_colln, all_users_conf['group_name'], root_admin_id)
 
+    permissions_helper.add_to_granted_list(
+        users_colln, [root_admin_id], [ObjectPermissions.READ], group_pids=[all_users_group_id])
+
     root_admins_conf = initial_agents_config['groups']['root_admins']
     root_admins_group_id = create_root_admins_group(
         users_colln, root_admins_conf['group_name'], root_admin_id, all_users_group_id)
@@ -59,9 +62,11 @@ def create_all_users_group(users_colln, group_name, creator_id):
         users_colln, all_users_group.to_json_map(), creator_id, [], ignore_source=True)
 
     permissions_helper.add_to_granted_list(
-        users_colln, [all_users_group_id], ObjectPermissions.ACTIONS, user_pids=[creator_id])
+        users_colln, [all_users_group_id], [ObjectPermissions.UPDATE_CONTENT], user_pids=[creator_id])
     permissions_helper.add_to_granted_list(
-        users_colln, [all_users_group_id], [ObjectPermissions.LINK_FROM_OTHERS], user_pids=['.*'])
+        users_colln, [all_users_group_id],
+        [ObjectPermissions.READ, ObjectPermissions.LINK_FROM_OTHERS],
+        user_pids=[creator_id], group_pids=[all_users_group_id])
     return all_users_group_id
 
 

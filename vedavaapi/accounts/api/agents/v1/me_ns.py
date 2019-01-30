@@ -30,7 +30,7 @@ class Me(flask_restplus.Resource):
     def get(self):
         args = self.get_parser.parse_args()
         current_org_name = get_current_org()
-        current_user_id = get_current_user_id()
+        current_user_id = get_current_user_id(required=True)
         users_colln = get_users_colln()
 
         projection = jsonify_argument(args.get('projection', None), key='projection')
@@ -41,12 +41,12 @@ class Me(flask_restplus.Resource):
         current_user_json = users_colln.find_one(users_helper.get_user_selector_doc(_id=current_user_id), projection=projection)
         if current_user_json is None:
             sign_out_user(current_org_name)
-            return error_response(message='not authorized', code=400)
+            return error_response(message='not authorized', code=401)
         return current_user_json, 200
 
     @me_ns.expect(post_parser, validate=True)
     def post(self):
-        current_user_id = get_current_user_id()
+        current_user_id = get_current_user_id(required=True)
         current_user_group_ids = get_current_user_group_ids()
         users_colln = get_users_colln()
         args = self.post_parser.parse_args()
