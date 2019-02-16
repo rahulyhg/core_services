@@ -1,6 +1,7 @@
 from sanskrit_ld.helpers.permissions_helper import PermissionResolver
 from sanskrit_ld.schema import JsonObject
 from sanskrit_ld.schema.base import ObjectPermissions
+from sanskrit_ld.schema.users import UsersGroup
 from vedavaapi.objectdb import objstore_helper
 
 
@@ -23,6 +24,14 @@ def get_group_id(groups_colln, group_name):
     group = get_group(groups_colln, get_group_selector_doc(group_name=group_name), projection={"_id": 1})
     # noinspection PyProtectedMember
     return group._id if group else None
+
+
+def get_user_group_ids(groups_colln, user_id):
+    return [
+        group['_id'] for group in groups_colln.find(
+            {"jsonClass": UsersGroup.json_class, "members": user_id}, projection={"_id": 1}
+        )
+    ]
 
 
 '''

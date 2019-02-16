@@ -32,11 +32,12 @@ class AccountsOrgHandler(OrgHandler):
         self.resource_protector.register_token_validator(bearer_validator())
 
     def initialize(self):
-        initial_agents_config = self.service.config["initial_agents"].copy()
-        initial_agents_config['users']['root_admin'].update(self.org_config['root_admin'])
         self.users_colln.create_index(keys_dict={
             "email": 1
         }, index_name="email")
+
+        initial_agents_config = self.service.config["initial_agents"].copy()
+        initial_agents_config['users']['root_admin'].update(self.org_config['root_admin'])
 
         logging.info("Add initial agents to the users db if they don't exist.")
         if initial_agents_config is None:
@@ -58,7 +59,6 @@ class VedavaapiAccounts(VedavaapiService):
         super(VedavaapiAccounts, self).__init__(registry, name, conf)
         os.environ['AUTHLIB_INSECURE_TRANSPORT'] = self.config.get(
             'authlib', {}).get('AUTHLIB_INSECURE_TRANSPORT', '0')
-        self.vvstore = registry.lookup("store")
 
     def get_users_colln(self, org_name):
         return self.get_org(org_name).users_colln

@@ -52,6 +52,7 @@ class OrgHandler(object):
         except FileNotFoundError:
             self.service_org_config = {}
         self.dbs_config = self.service.config.get('dbs', {})
+        self.accounts_api_config = self.service.config.get('accounts_api', {})
 
     def initialize(self):
         pass
@@ -201,7 +202,7 @@ class VedavaapiServices:
         for service in all_services:
             service_config_file = os.path.join(config_root_dir, '_services', '{service}.json'.format(service=service))
             with open(service_config_file, 'rb') as fhandle:
-                cls.service_configs[service] = json.loads(fhandle.read().decode('utf-8'))
+                cls.service_configs[service] = json.loads(fhandle.read().decode('utf-8') or '{}')
         # print(cls.server_config)
 
     @classmethod

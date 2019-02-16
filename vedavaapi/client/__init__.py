@@ -18,6 +18,7 @@ class VedavaapiClient(object):
         self.org_name = org_name
         self.session = requests.Session()
         self.authenticated = False
+        self.access_token = None
 
     def abs_url(self, url_part):
         return urljoin(urljoin(self.base_url, self.org_name + '/'), url_part)
@@ -34,66 +35,67 @@ class VedavaapiClient(object):
         self.authenticated = (r is not None)
         return self.authenticated
 
-    def authorize(self, token_uri, client_id, client_secret):
-        """
-        presently only client_credentials grant type supported
-        :param token_uri:
-        :param client_id:
-        :param client_secret:
-        :return:
-        """
+    def authorize_client(self, token_uri, client_id, client_secret):
         request_data = {
             "client_id": client_id,
             "client_secret": client_secret,
             "grant_type": "client_credentials"
         }
         atr = requests.post(token_uri.format(org_name=self.org_name), data=request_data)
-        return atr.json()
+        atr.raise_for_status()
+        self.access_token = atr.json()['access_token']
 
+    def set_access_token(self, access_token):
+        self.access_token = access_token
 
-    def get(self, url, parms=None):
-        if parms is None:
-            parms = {}
+    @classmethod
+    def authorization_header(cls, access_token):
+        return 'Bearer {}'.format(access_token) if access_token else None
+
+    @classmethod
+    def authorized_headers(cls, headers, access_token):
+        if not access_token:
+            return
+        new_headers = headers.copy()
+        new_headers['Authorization'] = cls.authorization_header(access_token)
+        return new_headers
+
+    def get(self, url, parms=None, authorize_request=True, **kwargs):
         url = self.abs_url(url)
+        parms = parms or {}
+        headers = kwargs.pop('headers', {})
+        if authorize_request:
+            headers = self.authorized_headers(headers, self.access_token)
+
         print("{} {}".format("GET", url))
-        try:
-            r = self.session.get(url, params=parms)
-            r.raise_for_status()
-            return r
-        except Exception as e:
-            logging.error("GET on {} returned {}".format(url, e))
-            return None
+        r = self.session.get(url, params=parms, headers=headers)
+        r.raise_for_status()
+        return r
 
-    def post(self, url, data=None, files=None):
-        if data is None:
-            data = {}
+    def post(self, url, data=None, files=None, authorize_request=True, **kwargs):
         url = self.abs_url(url)
+        data = data or {}
+        headers = kwargs.get('headers', {})
+        if authorize_request:
+            headers = self.authorized_headers(headers, self.access_token)
+
         print("{} {}".format("POST", url))
-        try:
-            # print_dict(parms)
-            r = self.session.post(url, data=data, files=files)
-            r.raise_for_status()
-            return r
-        except Exception as e:
-            logging.error("POST on {} returned {}".format(url, e))
-            try:
-                logging.error("error response: {}".format(r.json()))
-            except:
-                pass
-            return None
+        r = self.session.post(url, data=data, files=files, headers=headers)
+        r.raise_for_status()
+        return r
 
-    def delete(self, url, parms=None):
-        if parms is None:
-            parms = {}
+    def delete(self, url, data=None, authorize_request=True, **kwargs):
         url = self.abs_url(url)
-        print("{} {}".format("DELETE", url))
-        try:
-            r = self.session.delete(url, data=parms)
-            r.raise_for_status()
-            return r
-        except Exception as e:
-            logging.error("DELETE on {} returned {}".format(url, e))
-            return None
+        data = data or {}
+        headers = kwargs.get('headers', {})
+        if authorize_request:
+            headers = self.authorized_headers(headers, self.access_token)
+
+        print("{} {}".format("POST", url))
+        r = self.session.delete(url, data=data, headers=headers)
+        r.raise_for_status()
+        return r
+
 
 class DotDict(dict):
     def __getattr__(self, name):

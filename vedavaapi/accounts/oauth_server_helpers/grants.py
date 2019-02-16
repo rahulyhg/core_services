@@ -31,7 +31,8 @@ class AuthorizationCodeGrant(grants.AuthorizationCodeGrant):
             "scope": request.scope,
             "user_id": grant_user._id,
         }
-        existing_item = get_json_object(self.oauth_colln, authorization_code_doc, cast_class=OAuth2AuthorizationCodeModel)
+        existing_item = get_json_object(
+            self.oauth_colln, authorization_code_doc, cast_class=OAuth2AuthorizationCodeModel)
         if existing_item and not existing_item.is_expired():
             return existing_item.code
 
@@ -55,7 +56,8 @@ class AuthorizationCodeGrant(grants.AuthorizationCodeGrant):
         self.oauth_colln.delete_one(selector_doc)
 
     def authenticate_user(self, authorization_code):
-        user = users_helper.get_user(self.users_colln, _id=authorization_code.user_id)
+        user = users_helper.get_user(
+            self.users_colln, user_selector_doc=users_helper.get_user_selector_doc(_id=authorization_code.user_id))
         UserModel.cast(user)
         return user
 
@@ -68,7 +70,8 @@ class PasswordGrant(grants.ResourceOwnerPasswordCredentialsGrant):
         self.users_colln = self.server.users_colln
 
     def authenticate_user(self, username, password):
-        user = users_helper.get_user(self.users_colln, email=username)
+        user = users_helper.get_user(
+            self.users_colln, user_selector_doc=users_helper.get_user_selector_doc(email=username))
         UserModel.cast(user)
         if user.check_password(password):
             return user
@@ -91,7 +94,8 @@ class RefreshTokenGrant(grants.RefreshTokenGrant):
             return item
 
     def authenticate_user(self, credential):
-        user = users_helper.get_user(self.users_colln, _id=credential.user_id)
+        user = users_helper.get_user(
+            self.users_colln, user_selector_doc=users_helper.get_user_selector_doc(_id=credential.user_id))
         UserModel.cast(user)
         return user
 

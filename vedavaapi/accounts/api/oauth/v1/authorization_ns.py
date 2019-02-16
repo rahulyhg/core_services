@@ -1,17 +1,17 @@
 import sys
 
 import flask
-from flask import session, request, Response
+from flask import session, request, Response, g
 import flask_restplus
 import furl
 from authlib.flask.oauth2 import current_token
 from authlib.specs.rfc6749 import OAuth2Error
+from sanskrit_ld.schema.users import UsersGroup
 
 from vedavaapi.common.api_common import error_response, abort_with_error_response, get_current_org
 
 from . import api
-from ... import get_users_colln, get_authlib_authorization_server, get_authorizer_config, require_oauth
-from ... import get_current_user_id, sign_out_user, myservice, get_initial_agents
+from ... import sign_out_user, myservice, require_oauth
 
 from ....agents_helpers.oauth_client_helper import OauthClientsRegistry, OAuthClient
 from ....agents_helpers import users_helper
@@ -55,25 +55,24 @@ class Authorizer(flask_restplus.Resource):
     @authorization_ns.expect(get_parser, validate=True)
     def get(self):
         args = self.get_parser.parse_args()
-        current_user_id = get_current_user_id()
-        users_colln = get_users_colln()
-        current_user = users_helper.get_user(users_colln, users_helper.get_user_selector_doc(_id=current_user_id))
+        current_user = users_helper.get_user(
+            g.users_colln, users_helper.get_user_selector_doc(_id=g.current_user_id)) if g.current_user_id else None
 
-        authorization_server = get_authlib_authorization_server()
         try:
-            grant = authorization_server.validate_consent_request(request=request, end_user=current_user)
+            grant = g.authorization_server.validate_consent_request(request=request, end_user=current_user)
             print(grant, file=sys.stderr)
         except OAuth2Error as e:
-            return error_response(message='invalid api client', code=400, error=str(e))
+            raise e
+            # return error_response(message='invalid api client', code=400, error=e.get_body())
 
-        if not current_user:
+        if not g.current_user_id:
             next_page_url = (
-                    get_authorizer_config().get('sign_in_page_uri', None)
-                    or flask.url_for('oauth_server_v1.static', filename='signin.html', external=True))
+                    g.authorizer_config.get('sign_in_page_uri', None)
+                    or flask.url_for('oauth_server_v1.static', filename='signin.html', _external=True))
         else:
             next_page_url = (
-                    get_authorizer_config().get('consent_page_uri', None)
-                    or flask.url_for('oauth_server_v1.static', filename='consent.html', external=True))
+                    g.authorizer_config.get('consent_page_uri', None)
+                    or flask.url_for('oauth_server_v1.static', filename='consent.html', _external=True))
 
         next_page_furl = furl.furl(next_page_url)
         next_page_furl.args.update(args)
@@ -84,15 +83,12 @@ class Authorizer(flask_restplus.Resource):
         # TODO referer/origin should be checked
         # noinspection PyUnusedLocal
         args = self.post_parser.parse_args()
-        users_colln = get_users_colln()
-        current_user_id = get_current_user_id()
-        current_user = users_helper.get_user(users_colln, users_helper.get_user_selector_doc(current_user_id))
+        current_user = users_helper.get_user(g.users_colln, users_helper.get_user_selector_doc(g.current_user_id))
 
         if not current_user:
             return error_response(message='invalid request', code=400)
 
-        authorization_server = get_authlib_authorization_server()
-        return redirect_js(authorization_server.create_authorization_response(grant_user=current_user).location)
+        return redirect_js(g.authorization_server.create_authorization_response(grant_user=current_user).location)
 
 
 @authorization_ns.route('/signin')
@@ -106,13 +102,12 @@ class SignIn(flask_restplus.Resource):
     @authorization_ns.expect(post_parser, validate=True)
     def post(self):
         args = self.post_parser.parse_args()
-        users_colln = get_users_colln()
 
         email = args.get('email')
         password = args.get('password')
 
         user_selector_doc = users_helper.get_user_selector_doc(email=email)
-        user = users_helper.get_user(users_colln, user_selector_doc, projection={"_id": 1, "hashedPassword": 1})
+        user = users_helper.get_user(g.users_colln, user_selector_doc, projection={"_id": 1, "hashedPassword": 1})
         if user is None:
             return error_response(message='user not found', code=401)
 
@@ -121,10 +116,9 @@ class SignIn(flask_restplus.Resource):
         if not users_helper.check_password(user, password):
             return error_response(message='incorrect password', code=401)
 
-        current_org = get_current_org()
         session['authentications'] = session.get('authentications', {})
         # noinspection PyProtectedMember
-        session['authentications'][current_org] = {"user_id": user._id}
+        session['authentications'][g.current_org_name] = {"user_id": user._id}
 
         return redirect_js_response(
             args.get('redirect_url', None),
@@ -171,7 +165,6 @@ class OAuthCallback(flask_restplus.Resource):
 
     @authorization_ns.expect(get_parser, validate=True)
     def get(self, provider_name):
-        users_colln = get_users_colln()
         args = self.get_parser.parse_args()
         oauth_client = get_oauth_client(provider_name)  # type: OAuthClient
 
@@ -196,23 +189,22 @@ class OAuthCallback(flask_restplus.Resource):
         auth_info = oauth_client.normalized_user_info(userinfo)
 
         user_selector_doc = users_helper.get_user_selector_doc(email=auth_info.email)
-        user_id = users_helper.get_user_id(users_colln, auth_info.email)
+        user_id = users_helper.get_user_id(g.users_colln, auth_info.email)
         if user_id is None:
             user_json = {
                 "jsonClass": "User",
                 "email": auth_info.email
             }
             user_id = users_helper.create_new_user(
-                users_colln, user_json, initial_agents=get_initial_agents(), with_password=False)
+                g.users_colln, user_json, initial_agents=g.initial_agents, with_password=False)
 
-        users_helper.add_external_authentication(users_colln, user_selector_doc, auth_info)
+        users_helper.add_external_authentication(g.users_colln, user_selector_doc, auth_info)
 
-        current_org = get_current_org()
         session['authentications'] = session.get('authentications', {})
-        session['authentications'][current_org] = {"user_id": user_id, "provider_name": "google"}
+        session['authentications'][g.current_org_name] = {"user_id": user_id, "provider_name": "google"}
 
         return redirect_js_response(
-            args.get('redirect_url', None), 'sign in successful', 'sign in successful, but redirect uri is invalid')
+            args.get('state', args.get('redirect_url', None)), 'sign in successful', 'sign in successful, but redirect uri is invalid')
 
 
 # noinspection PyMethodMayBeStatic
@@ -220,7 +212,7 @@ class OAuthCallback(flask_restplus.Resource):
 class SignOut(flask_restplus.Resource):
 
     def get(self):
-        current_authentication_details = sign_out_user(get_current_org())
+        current_authentication_details = sign_out_user(g.current_org_name)
         if not current_authentication_details:
             return error_response(message='not signed in', code=401)
         return {"message": "signout successful"}, 200
@@ -238,33 +230,26 @@ class Token(flask_restplus.Resource):
 
     @authorization_ns.expect(post_parser, validate=True)
     def post(self):
-        authorization_server = get_authlib_authorization_server()
-        return authorization_server.create_token_response(request=request)
+        return g.authorization_server.create_token_response(request=request)
 
 
 @authorization_ns.route('/resolve_token')
 class TokenResolver(flask_restplus.Resource):
 
     get_parser = authorization_ns.parser()
-    get_parser.add_argument('include_user', type=bool, location='args', default=False)
 
     @require_oauth()
     def get(self):
         token = current_token
         print(current_token)
-        users_colln = get_users_colln()
         args = self.get_parser.parse_args()
 
-        response = {
-            "token": token.access_token,
-            "scopes": token.scope.split(),
-            "user_id": token.user_id
-        }
-        if args.get('include_user', False):
-            user = users_helper.get_user(
-                users_colln, users_helper.get_user_selector_doc(_id=token.user_id),
-                projection={"permissions": 0, "hashedPassword": 0}
-            )
-            response['user'] = user.to_json_map()
+        token_doc = token.to_json_map()
+        if hasattr(token, 'user_id'):
+            group_ids = [
+                group['_id'] for group in g.users_colln.find(
+                    {"jsonClass": UsersGroup.json_class, "members": token.user_id}, projection={"_id": 1})
+            ]
+            token_doc['group_ids'] = group_ids
 
-        return response, 200
+        return token_doc, 200

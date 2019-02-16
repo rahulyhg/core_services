@@ -78,15 +78,6 @@ class OAuth2ClientModel(OAuth2BaseModel, ClientMixin, OAuth2Client):
         return selector_doc
 
     @classmethod
-    def get_client_json(cls, oauth_colln, _id=None, client_id=None, projection=None):
-        client_selector_doc = cls.get_client_selector_doc(_id=_id, client_id=client_id)
-
-        if client_selector_doc is None:
-            return None
-
-        return oauth_colln.find_one(client_selector_doc, projection=projection)
-
-    @classmethod
     def get_client(cls, oauth_colln, _id=None, client_id=None, projection=None):
         client_selector_doc = cls.get_client_selector_doc(_id=_id, client_id=client_id)
 
@@ -233,7 +224,7 @@ def create_save_token_func(oauth_colln):
 
     def save_token(token, request):
         if request.user:
-            user_id = request.user.get_user_id()
+            user_id = request.user._id
         else:
             user_id = None
 

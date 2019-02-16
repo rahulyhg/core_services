@@ -119,10 +119,10 @@ class GoogleClient(OAuthClient):
     def normalized_user_info(self, userinfo):
         auth_info = AuthenticationInfo()
         auth_info.set_from_dict({
-            'email': userinfo['email'],
-            'name': userinfo['name'],
-            'uid': userinfo['profile'],
-            'picture': userinfo['picture'],
+            'email': userinfo.get('email', None),
+            'name': userinfo.get('name', None),
+            'uid': userinfo.get('sub', None),
+            'picture': userinfo.get('picture', None),
             'provider': self.provider_name,
             #  'raw_provider_response': userinfo
         })

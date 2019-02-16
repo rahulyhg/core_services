@@ -1,3 +1,4 @@
+from flask import g
 import flask_restplus
 import six
 from jsonschema import ValidationError
@@ -5,16 +6,14 @@ from jsonschema import ValidationError
 from sanskrit_ld.helpers.permissions_helper import PermissionResolver
 from sanskrit_ld.schema import JsonObject
 from sanskrit_ld.schema.base import ObjectPermissions
-
-from vedavaapi.common.api_common import jsonify_argument, check_argument_type, error_response, abort_with_error_response
-from vedavaapi.common.api_common import get_current_user_id, get_current_user_group_ids
 from vedavaapi.objectdb import objstore_helper
 
-from ....agents_helpers import groups_helper
+from vedavaapi.common.api_common import jsonify_argument, check_argument_type, error_response, abort_with_error_response
+from vedavaapi.common.token_helper import require_oauth, current_token
+
 from . import api
 from .users_ns import get_requested_agents, _validate_projection
-from ... import get_users_colln, get_initial_agents
-
+from ....agents_helpers import groups_helper
 
 groups_ns = api.namespace('groups', path='/groups', description='groups namespace')
 
@@ -34,22 +33,19 @@ class Groups(flask_restplus.Resource):
     post_parser.add_argument('return_projection', location='form', type=str)
 
     @groups_ns.expect(get_parser, validate=True)
+    @require_oauth()
     def get(self):
         args = self.get_parser.parse_args()
-        users_colln = get_users_colln()
-        current_user_id = get_current_user_id(required=True)
-        current_user_group_ids = get_current_user_group_ids()
 
         group_jsons = get_requested_agents(
-            args, users_colln, current_user_id, current_user_group_ids,  filter_doc={"jsonClass": "UsersGroup"})
+            args, g.users_colln,
+            current_token.user_id, current_token.group_ids,  filter_doc={"jsonClass": "UsersGroup"})
         return group_jsons
 
     @groups_ns.expect(post_parser, validate=True)
+    @require_oauth()
     def post(self):
-        users_colln = get_users_colln()
         args = self.post_parser.parse_args()
-        current_user_id = get_current_user_id(required=True)
-        current_user_group_ids = get_current_user_group_ids()
 
         group_json = jsonify_argument(args['group_json'], key='group_json')
         check_argument_type(group_json, (dict,), key='group_json')
@@ -62,13 +58,14 @@ class Groups(flask_restplus.Resource):
 
         try:
             new_group_id = groups_helper.create_new_group(
-                users_colln, group_json, current_user_id, current_user_group_ids, initial_agents=get_initial_agents())
+                g.users_colln, group_json,
+                current_token.user_id, current_token.group_ids, initial_agents=g.initial_agents)
         except objstore_helper.ObjModelException as e:
             return error_response(message=e.message, code=e.http_response_code)
         except ValidationError as e:
             return error_response(message='invalid schema for group_json', code=403, details={"error": str(e)})
 
-        new_group_json = users_colln.get(new_group_id, projection=return_projection)
+        new_group_json = g.users_colln.get(new_group_id, projection=return_projection)
         return new_group_json
 
 
@@ -95,11 +92,9 @@ class GroupResource(flask_restplus.Resource):
         }.get(identifier_type)
 
     @groups_ns.expect(get_parser, validate=True)
+    @require_oauth()
     def get(self, group_identifier):
-        users_colln = get_users_colln()
         args = self.get_parser.parse_args()
-        current_user_id = get_current_user_id(required=True)
-        current_user_group_ids = get_current_user_group_ids()
 
         identifier_type = args.get('identifier_type', '_id')
         group_selector_doc = self._group_selector_doc(group_identifier, identifier_type)
@@ -109,12 +104,12 @@ class GroupResource(flask_restplus.Resource):
         _validate_projection(projection)
         projection = objstore_helper.modified_projection(projection, mandatory_attrs=["_id", "jsonClass"])
 
-        group = JsonObject.make_from_dict(users_colln.find_one(group_selector_doc, projection=None))
+        group = JsonObject.make_from_dict(g.users_colln.find_one(group_selector_doc, projection=None))
         if group is None:
             return error_response(message='group not found', code=404)
 
         if not PermissionResolver.resolve_permission(
-                group, ObjectPermissions.READ, current_user_id, current_user_group_ids, users_colln):
+                group, ObjectPermissions.READ, current_token.user_id, current_token.group_ids, g.users_colln):
             return error_response(message='permission denied', code=403)
 
         group_json = group.to_json_map()
@@ -122,11 +117,9 @@ class GroupResource(flask_restplus.Resource):
         return projected_group_json
 
     @groups_ns.expect(post_parser, validate=True)
+    @require_oauth()
     def post(self, group_identifier):
-        users_colln = get_users_colln()
         args = self.get_parser.parse_args()
-        current_user_id = get_current_user_id(required=True)
-        current_user_group_ids = get_current_user_group_ids()
 
         identifier_type = args.get('identifier_type', '_id')
         group_selector_doc = self._group_selector_doc(group_identifier, identifier_type)
@@ -144,7 +137,7 @@ class GroupResource(flask_restplus.Resource):
             if update_doc['_id'] != group_identifier:
                 return error_response(message='invalid user_id', code=403)
         else:
-            group_id = groups_helper.get_group_id(users_colln, group_identifier)
+            group_id = groups_helper.get_group_id(g.users_colln, group_identifier)
             if not group_id:
                 return error_response(message='no group with group_name {}'.format(group_identifier))
             update_doc['_id'] = group_id
@@ -158,7 +151,7 @@ class GroupResource(flask_restplus.Resource):
         try:
             group_update = JsonObject.make_from_dict(update_doc)
             updated_group_id = objstore_helper.update_resource(
-                users_colln, group_update, current_user_id, current_user_group_ids,
+                g.users_colln, group_update, current_token.user_id, current_token.group_ids,
                 not_allowed_attributes=['members', 'groupName'])
             if updated_group_id is None:
                 raise objstore_helper.ObjModelException('group not exist', 404)
@@ -167,7 +160,7 @@ class GroupResource(flask_restplus.Resource):
         except ValueError as e:
             return error_response(message='schema validation error', code=403, details={"error": str(e)})
 
-        group_json = users_colln.find_one(group_selector_doc, projection=return_projection)
+        group_json = g.users_colln.find_one(group_selector_doc, projection=return_projection)
         return group_json
 
 
@@ -182,37 +175,34 @@ class Members(flask_restplus.Resource):
     post_parser.add_argument('member_ids', type=str, location='form', required=True)
 
     delete_parser = groups_ns.parser()
-    delete_parser.add_argument('identifier_type', type=str, location='form', default='_id', choices=['_id', 'groupName'])
+    delete_parser.add_argument(
+        'identifier_type', type=str, location='form', default='_id', choices=['_id', 'groupName'])
     delete_parser.add_argument('member_ids', type=str, location='form', required=True)
 
     @groups_ns.expect(get_parser, validate=True)
+    @require_oauth()
     def get(self, group_identifier):
         args = self.get_parser.parse_args()
-        users_colln = get_users_colln()
-        current_user_id = get_current_user_id(required=True)
-        current_user_group_ids = get_current_user_group_ids()
 
         identifier_type = args.get('identifier_type', '_id')
         # noinspection PyProtectedMember
         group_selector_doc = GroupResource._group_selector_doc(group_identifier, identifier_type)
 
-        group = JsonObject.make_from_dict(users_colln.find_one(group_selector_doc, projection=None))
+        group = JsonObject.make_from_dict(g.users_colln.find_one(group_selector_doc, projection=None))
         if group is None:
             return error_response(message='group not found', code=404)
 
         if not PermissionResolver.resolve_permission(
-                group, ObjectPermissions.READ, current_user_id, current_user_group_ids, users_colln):
+                group, ObjectPermissions.READ, current_token.user_id, current_token.group_ids, g.users_colln):
             return error_response(message='permission denied', code=403)
 
         member_ids = group.members if hasattr(group, 'members') else []
         return member_ids
 
     @groups_ns.expect(post_parser, validate=True)
+    @require_oauth()
     def post(self, group_identifier):
         args = self.post_parser.parse_args()
-        users_colln = get_users_colln()
-        current_user_id = get_current_user_id(required=True)
-        current_user_group_ids = get_current_user_group_ids()
 
         identifier_type = args.get('identifier_type', '_id')
         # noinspection PyProtectedMember
@@ -227,19 +217,17 @@ class Members(flask_restplus.Resource):
         try:
             # noinspection PyUnusedLocal
             modified_count = groups_helper.add_users_to_group(
-                users_colln, group_selector_doc, user_ids, current_user_id, current_user_group_ids)
+                g.users_colln, group_selector_doc, user_ids, current_token.user_id, current_token.group_ids)
         except objstore_helper.ObjModelException as e:
             return error_response(message=e.message, code=e.http_response_code)
 
-        member_ids = users_colln.find_one(group_selector_doc, projection={"members": 1}).get('members', [])
+        member_ids = g.users_colln.find_one(group_selector_doc, projection={"members": 1}).get('members', [])
         return member_ids
 
     @groups_ns.expect(delete_parser, validate=True)
+    @require_oauth()
     def delete(self, group_identifier):
         args = self.delete_parser.parse_args()
-        users_colln = get_users_colln()
-        current_user_id = get_current_user_id(required=True)
-        current_user_group_ids = get_current_user_group_ids()
 
         identifier_type = args.get('identifier_type', '_id')
         # noinspection PyProtectedMember
@@ -254,9 +242,9 @@ class Members(flask_restplus.Resource):
         try:
             # noinspection PyUnusedLocal
             modified_count = groups_helper.remove_users_from_group(
-                users_colln, group_selector_doc, user_ids, current_user_id, current_user_group_ids)
+                g.users_colln, group_selector_doc, user_ids, current_token.user_id, current_token.group_ids)
         except objstore_helper.ObjModelException as e:
             return error_response(message=e.message, code=e.http_response_code)
 
-        member_ids = users_colln.find_one(group_selector_doc, projection={"members": 1}).get('members', [])
+        member_ids = g.users_colln.find_one(group_selector_doc, projection={"members": 1}).get('members', [])
         return member_ids

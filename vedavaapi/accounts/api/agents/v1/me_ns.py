@@ -1,18 +1,31 @@
 import bcrypt
+from flask import g
 import flask_restplus
-from sanskrit_ld.schema import JsonObject
 
-from vedavaapi.common.api_common import error_response, jsonify_argument, check_argument_type
-from vedavaapi.common.api_common import get_current_user_id, get_current_org, get_current_user_group_ids
+from sanskrit_ld.schema import JsonObject
+from vedavaapi.accounts.agents_helpers import groups_helper
 from vedavaapi.objectdb import objstore_helper
 
-from . import api
-from ... import get_users_colln, sign_out_user
-from ....agents_helpers import users_helper
-from .users_ns import _validate_projection
+from vedavaapi.common.api_common import error_response, jsonify_argument, check_argument_type, abort_with_error_response
+from vedavaapi.common.token_helper import require_oauth, current_token
 
+from . import api
+from .users_ns import _validate_projection
+from ... import sign_out_user
+from ....agents_helpers import users_helper
 
 me_ns = api.namespace('me', path='/me', description='personalization namespace')
+
+
+def resolve_user_id():
+    if current_token.user_id:
+        return current_token.user_id
+    elif g.current_user_id:
+        return g.current_user_id
+    else:
+        message = "not authorized on behalf of any user" if current_token.client_id else "not authorized"
+        error = error_response(message=message, code=401)
+        abort_with_error_response(error)
 
 
 # noinspection PyMethodMayBeStatic
@@ -27,38 +40,38 @@ class Me(flask_restplus.Resource):
     post_parser.add_argument('return_projection', type=str, location='form')
 
     @me_ns.expect(get_parser, validate=True)
+    @require_oauth(token_required=False)
     def get(self):
+        user_id = resolve_user_id()
         args = self.get_parser.parse_args()
-        current_org_name = get_current_org()
-        current_user_id = get_current_user_id(required=True)
-        users_colln = get_users_colln()
 
         projection = jsonify_argument(args.get('projection', None), key='projection')
         check_argument_type(projection, (dict,), key='projection', allow_none=True)
         _validate_projection(projection)
         projection = objstore_helper.modified_projection(projection, mandatory_attrs=["_id", "jsonClass"])
 
-        current_user_json = users_colln.find_one(users_helper.get_user_selector_doc(_id=current_user_id), projection=projection)
+        current_user_json = g.users_colln.find_one(
+            users_helper.get_user_selector_doc(_id=user_id), projection=projection)
         if current_user_json is None:
-            sign_out_user(current_org_name)
+            sign_out_user(g.current_org_name)
             return error_response(message='not authorized', code=401)
         return current_user_json, 200
 
     @me_ns.expect(post_parser, validate=True)
+    @require_oauth(token_required=False)
     def post(self):
-        current_user_id = get_current_user_id(required=True)
-        current_user_group_ids = get_current_user_group_ids()
-        users_colln = get_users_colln()
-        args = self.post_parser.parse_args()
+        user_id = resolve_user_id()
+        group_ids = groups_helper.get_user_group_ids(g.users_colln, user_id)
 
+        args = self.post_parser.parse_args()
         update_doc = jsonify_argument(args['update_doc'], key='update_doc')
         check_argument_type(update_doc, (dict,), key='update_doc')
         if '_id' not in update_doc:
-            update_doc['_id'] = current_user_id
+            update_doc['_id'] = user_id
         if 'jsonClass' not in update_doc:
             update_doc['jsonClass'] = 'User'
 
-        if update_doc['_id'] != current_user_id:
+        if update_doc['_id'] != user_id:
             return error_response(message='invalid _id', code=403)
         if update_doc['jsonClass'] != 'User':
             return error_response(message='invalid jsonClass', code=403)
@@ -77,7 +90,7 @@ class Me(flask_restplus.Resource):
         try:
             user_update = JsonObject.make_from_dict(update_doc)
             updated_user_id = objstore_helper.update_resource(
-                users_colln, user_update, current_user_id, current_user_group_ids,
+                g.users_colln, user_update, user_id, group_ids,
                 not_allowed_attributes=('externalAuthentications', 'password'))
             if updated_user_id is None:
                 raise objstore_helper.ObjModelException('user not exist', 404)
@@ -86,5 +99,5 @@ class Me(flask_restplus.Resource):
         except ValueError as e:
             return error_response(message='schema validation error', code=403, details={"error": str(e)})
 
-        user_json = users_colln.get(current_user_id, projection=return_projection)
+        user_json = g.users_colln.get(user_id, projection=return_projection)
         return user_json

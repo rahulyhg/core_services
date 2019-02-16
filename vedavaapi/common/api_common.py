@@ -1,12 +1,8 @@
 import json
-import sys
 
-import requests
-from flask import request, session
 import flask
+from flask import request
 from sanskrit_ld.schema import JsonObject
-from vedavaapi.common import VedavaapiServices
-from vedavaapi.accounts import VedavaapiAccounts
 
 
 def get_current_org():
@@ -20,33 +16,18 @@ def get_current_org():
     return org_name
 
 
-def get_current_user_id(required=False):
-    authentications = session.get('authentications', {})
-    current_org_name = get_current_org()
-    if current_org_name not in authentications:
-        if required:
-            error = error_response(message='not authorized', code=401)
-            abort_with_error_response(error)
-        return None
-    return authentications[current_org_name]["user_id"]
-
-def get_current_user_group_ids():
-    current_user_id = get_current_user_id()
-    return get_group_ids(get_current_org(), current_user_id)
-
-def get_group_ids(org_name, user_id):
+def get_initial_agents(org_name=None):
+    from vedavaapi.common import VedavaapiServices
+    from vedavaapi.accounts import VedavaapiAccounts
+    if not org_name:
+        org_name = get_current_org()
     accounts_service = VedavaapiServices.lookup('accounts')  # type: VedavaapiAccounts
-    users_colln = accounts_service.get_users_colln(org_name)
-
-    group_ids = [
-        group['_id'] for group in users_colln.find(
-            {"jsonClass": "UsersGroup", "members": user_id}, projection={"_id": 1}
-        )
-    ]
-    return group_ids
+    return accounts_service.get_initial_agents(org_name)
 
 
 def get_user(org_name, user_id, projection=None):
+    from vedavaapi.common import VedavaapiServices
+    from vedavaapi.accounts import VedavaapiAccounts
     accounts_service = VedavaapiServices.lookup('accounts')  # type: VedavaapiAccounts
     users_colln = accounts_service.get_users_colln(org_name)
     if projection is not None:
@@ -61,6 +42,8 @@ def get_user(org_name, user_id, projection=None):
 
 
 def get_group(org_name, group_id, projection=None):
+    from vedavaapi.common import VedavaapiServices
+    from vedavaapi.accounts import VedavaapiAccounts
     accounts_service = VedavaapiServices.lookup('accounts')  # type: VedavaapiAccounts
     users_colln = accounts_service.get_users_colln(org_name)
     if projection is not None:
@@ -72,12 +55,6 @@ def get_group(org_name, group_id, projection=None):
     group_json = users_colln.get(group_id, projection=projection)
 
     return JsonObject.make_from_dict(group_json)
-
-
-def get_initial_agents():
-    current_org_name = get_current_org()
-    accounts_service = VedavaapiServices.lookup('accounts')  # type: VedavaapiAccounts
-    return accounts_service.get_initial_agents(current_org_name)
 
 
 def jsonify_argument(doc_string, key=None):
@@ -109,48 +86,6 @@ def check_argument_type(obj, allowed_types, key=None, allow_none=False, respond_
     message = '{}\'s type should be one among {}'.format(key or 'object', str(allowed_types))
     error = error_response(message=message, code=400)
     abort_with_error_response(error)
-
-
-def get_authorization_token():
-    if request.headers.get('Authorization', None):
-        return request.headers['Authorization'], False
-
-    elif session.get('authorization', None):
-        authorization_cookie = session['authorization']
-        print(authorization_cookie, file=sys.stderr)
-        if not authorization_cookie.get('provider', None) == 'vedavaapi':
-            return None, False
-        if not authorization_cookie.get('authorization_token', None):
-            return None, True
-        return authorization_cookie['authorization_token'], True
-    else:
-        return None, False
-
-
-def resolve_token(resolve_token_uri, include_user=False, required_scopes=None, operator='OR'):
-    token, internal = get_authorization_token()
-    if token is None:
-        error = error_response(message='not authorized', code=401)
-        abort_with_error_response(error)
-
-    # noinspection PyUnboundLocalVariable
-    token_info_response = requests.get(
-        resolve_token_uri, headers={"Authorization": "Bearer " + token}, params={"include_user": include_user})
-    if token_info_response.status_code != 200:
-        error = error_response(
-            message='invalid authorization', code=403, oauth_server_response=token_info_response.json())
-        abort_with_error_response(error)
-    token_info = token_info_response.json()
-
-    granted_scopes = set(token_info['scopes'])
-    required_scopes = set(required_scopes or [])
-
-    if ((operator == 'AND' and not required_scopes.issubset(granted_scopes))
-            or (operator == 'OR' and required_scopes.isdisjoint(granted_scopes))):
-        error = error_response(message='client doesn\'t have authorization for this scope', code=403)
-        abort_with_error_response(error)
-
-    return token_info
 
 
 def abort_with_error_response(response):
