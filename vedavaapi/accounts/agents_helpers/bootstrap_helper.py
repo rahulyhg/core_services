@@ -1,7 +1,9 @@
 from collections import namedtuple
 
-from sanskrit_ld.schema.base import ObjectPermissions
+from sanskrit_ld.schema import WrapperObject
+from sanskrit_ld.schema.base import ObjectPermissions, AgentSet
 from sanskrit_ld.helpers import permissions_helper
+from sanskrit_ld.schema.oauth import OAuth2MasterConfig
 from sanskrit_ld.schema.users import User, UsersGroup
 
 from ..agents_helpers import users_helper, groups_helper
@@ -31,6 +33,8 @@ def bootstrap_initial_agents(users_colln, oauth_colln, initial_agents_config):
     root_client_id = create_root_oauth_client(
         oauth_colln, root_oauth_client_conf['client_id'], root_oauth_client_conf['client_secret'],
         root_admin_id, root_oauth_client_conf.get('redirect_uris', None))
+
+    bootstrap_oauth2_master_config(oauth_colln, root_admin_id, root_admins_group_id)
 
     return InitialAgents(root_admin_id, all_users_group_id, root_admins_group_id, root_client_id)
 
@@ -87,6 +91,34 @@ def create_root_admins_group(users_colln, group_name, creator_id, parent_group_i
     permissions_helper.add_to_granted_list(
         users_colln, [root_admins_group_id], ObjectPermissions.ACTIONS, user_pids=[creator_id])
     return root_admins_group_id
+
+
+def bootstrap_oauth2_master_config(oauth_colln, root_admin_id, root_admins_group_id):
+    existing_master_config = oauth_colln.find_one({"jsonClass": OAuth2MasterConfig.json_class}, projection={"_id": 1})
+    if existing_master_config:
+        return existing_master_config['_id']
+
+    oauth2_master_config = OAuth2MasterConfig()
+    grant_privileges_conf = WrapperObject()
+
+    ccg_agent_set = AgentSet.template_agent_set()
+    ccg_agent_set.groups.append(root_admins_group_id)
+    pw_agent_set = AgentSet.template_agent_set()
+    pw_agent_set.groups.append(root_admins_group_id)
+
+    grant_privileges_conf.set_from_dict({
+        "client_credentials": ccg_agent_set,
+        "password": pw_agent_set
+    })
+
+    permissions = ObjectPermissions.template_object_permissions()
+    permissions.add_to_granted_list([ObjectPermissions.READ, ObjectPermissions.UPDATE_CONTENT], group_pids=[root_admins_group_id])
+
+    oauth2_master_config.set_from_dict({
+        "permissions": permissions,
+        "grant_privileges": grant_privileges_conf
+    })
+    return oauth_colln.insert_one(oauth2_master_config.to_json_map()).inserted_id
 
 
 def create_root_oauth_client(oauth_colln, client_id, client_secret, user_id, redirect_uris=None):

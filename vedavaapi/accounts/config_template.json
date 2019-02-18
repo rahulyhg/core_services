@@ -37,7 +37,7 @@
   "authlib": {
     "OAUTH2_TOKEN_EXPIRES_IN": {
       "authorization_code": 864000,
-      "implicit": 3600,
+      "implicit": 108000,
       "password": 864000,
       "client_credentials": 864000
     },

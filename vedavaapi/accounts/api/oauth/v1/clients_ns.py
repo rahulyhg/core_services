@@ -17,7 +17,7 @@ def marshal_to_google_structure(client_json):
     token_uri = request.url_root + 'accounts/oauth/v1/token'
     installed = {
         "client_id": client_json['client_id'],
-        "client_secret": client_json['client_secret'],
+        "client_secret": client_json.get('client_secret'),
         "redirect_uris": client_json.get('redirect_uris', []),
         "auth_uri": authorization_uri,
         "token_uri": token_uri
@@ -30,11 +30,12 @@ class Clients(flask_restplus.Resource):
 
     get_parser = clients_ns.parser()
     get_parser.add_argument('projection', type=str, location='args')
-    get_parser.add_argument('marshal_to_google_structure', type=bool, location='args')
+    get_parser.add_argument('marshal_to_google_structure', type=str, location='args', default='false', choices=['true', 'false'])
 
     post_parser = clients_ns.parser()
     post_parser.add_argument('client_json', type=str, location='form', required=True)
     post_parser.add_argument('client_type', type=str, location='form', required=True, choices=['public', 'private'])
+    post_parser.add_argument('marshal_to_google_structure', type=str, location='form', default='false', choices=['true', 'false'])
 
     @clients_ns.expect(get_parser, validate=True)
     def get(self):
@@ -53,7 +54,8 @@ class Clients(flask_restplus.Resource):
             "user_id": g.current_user_id
         }
         client_jsons = (g.oauth_colln.find(clients_selector_doc, projection=projection))
-        if not args['marshal_to_google_structure']:
+        print(args['marshal_to_google_structure'])
+        if not jsonify_argument(args['marshal_to_google_structure']):
             return client_jsons
         return [marshal_to_google_structure(cj) for cj in client_jsons]
 
@@ -79,4 +81,6 @@ class Clients(flask_restplus.Resource):
             return error_response(message='invalid schema for client_json', code=403, details={"error": str(e)})
 
         new_client_json = g.oauth_colln.find_one({"_id": new_client_id})
-        return new_client_json
+        if not jsonify_argument(args['marshal_to_google_structure']):
+            return new_client_json
+        return marshal_to_google_structure(new_client_json)

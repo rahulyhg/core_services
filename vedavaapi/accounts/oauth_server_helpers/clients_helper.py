@@ -69,16 +69,17 @@ def create_new_client(oauth_colln, client_json, client_type, user_id, group_ids,
             raise objstore_helper.ObjModelException('unsufficient data', 403)
 
     client_id = uuid.uuid4().hex
-    grant_types = ['authorization_code', 'refresh_token', 'implicit']
-    if allow_cc_grant:
-        grant_types.append('client_credentials')
-    if allow_pw_grant:
-        grant_types.append('password')
+    grant_types = ['authorization_code', 'refresh_token', 'implicit'] if client_type == 'private' else ['implicit']
+    if client_type == 'private':
+        if allow_cc_grant:
+            grant_types.append('client_credentials')
+        if allow_pw_grant:
+            grant_types.append('password')
 
     client_json.update({
         "client_id": client_id,
         "token_endpoint_auth_method": "client_secret_post" if client_type != 'public' else 'none',
-        "grant_types": grant_types, "response_types": ["code", "token"],
+        "grant_types": grant_types, "response_types": ["code", "token"] if client_type == 'private' else ["token"],
         "scope": "vedavaapi.root", "user_id": user_id
     })
 

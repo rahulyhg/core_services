@@ -62,8 +62,8 @@ class Authorizer(flask_restplus.Resource):
             grant = g.authorization_server.validate_consent_request(request=request, end_user=current_user)
             print(grant, file=sys.stderr)
         except OAuth2Error as e:
-            raise e
-            # return error_response(message='invalid api client', code=400, error=e.get_body())
+            # raise e
+            return error_response(message='invalid api client', code=400, error=e.get_body())
 
         if not g.current_user_id:
             next_page_url = (
