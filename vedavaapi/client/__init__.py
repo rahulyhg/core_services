@@ -1,4 +1,5 @@
 import logging
+import os
 
 import requests
 
@@ -21,7 +22,12 @@ class VedavaapiClient(object):
         self.access_token = None
 
     def abs_url(self, url_part):
-        return urljoin(urljoin(self.base_url, self.org_name + '/'), url_part)
+        return os.path.join(
+            self.base_url.lstrip('/'),
+            self.org_name.lstrip('/'),
+            url_part
+        )
+        # return urljoin(urljoin(self.base_url, self.org_name + '/'), url_part)
 
     def authenticate(self, creds=None):
         if self.authenticated or not creds:
@@ -81,7 +87,7 @@ class VedavaapiClient(object):
 
         print("{} {}".format("POST", url))
         r = self.session.post(url, data=data, files=files, headers=headers)
-        print(r.json())
+        #print(r.json())
         r.raise_for_status()
         return r
 
