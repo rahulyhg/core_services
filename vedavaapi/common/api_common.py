@@ -8,12 +8,14 @@ from sanskrit_ld.schema import JsonObject
 def get_current_org():
     org_name = request.environ['SCRIPT_NAME'].split('/')[-1]
     org_names_list = flask.current_app.config.get('ORGS', [])
-    if not org_name:
+
+    if not org_name or request.environ['ORIGINAL_SCRIPT_NAME'] == request.environ['SCRIPT_NAME']:
         if len(org_names_list) == 1:
             return org_names_list[0]
         else:
             error = error_response(message='resource not found', code=404)
             abort_with_error_response(error)
+
     if org_name not in flask.current_app.config.get('ORGS', []):
         error = error_response(message='resource not found', code=404)
         abort_with_error_response(error)

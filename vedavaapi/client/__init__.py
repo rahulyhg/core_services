@@ -81,6 +81,7 @@ class VedavaapiClient(object):
 
         print("{} {}".format("POST", url))
         r = self.session.post(url, data=data, files=files, headers=headers)
+        print(r.json())
         r.raise_for_status()
         return r
 
