@@ -1,6 +1,7 @@
 
 import flask_restplus
 from flask import g
+from jsonschema import ValidationError
 from sanskrit_ld.schema.services import VedavaapiService
 
 from vedavaapi.objectdb import objstore_helper
@@ -22,7 +23,7 @@ class Services(flask_restplus.Resource):
     post_parser.add_argument('return_projection', location='form')
 
     delete_parser = api.parser()
-    delete_parser.add_argument('filter_doc', location='form', required=True)
+    delete_parser.add_argument('resource_ids', location='form', required=True)
 
     @api.expect(get_parser, validate=True)
     @require_oauth(token_required=False)
@@ -86,6 +87,8 @@ class Services(flask_restplus.Resource):
                 initial_agents=get_initial_agents(), non_updatable_attributes=['service_name'])
         except objstore_helper.ObjModelException as e:
             return error_response(message=e.message, code=e.http_response_code)
+        except ValidationError as e:
+            return error_response(message='schema validation error', code=400, details={"error": str(e)})
 
         updated_service_json = g.registry_colln.find_one({"_id": service_id}, projection=return_projection)
         return updated_service_json
@@ -95,10 +98,22 @@ class Services(flask_restplus.Resource):
     def delete(self):
         args = self.delete_parser.parse_args()
 
-        filter_doc = jsonify_argument(args['filter_doc'], key='filter_doc')
-        check_argument_type(filter_doc, (dict, ), key='filter_doc')
+        resource_ids = jsonify_argument(args['resource_ids'])
+        check_argument_type(resource_ids, (list,))
 
-        selector_doc = filter_doc.copy()
-        selector_doc.update({"jsonClass": VedavaapiService.json_class})
+        ids_validity = False not in [isinstance(_id, str) for _id in resource_ids]
+        if not ids_validity:
+            return error_response(message='ids should be strings', code=404)
 
-        pass
+        delete_report = []
+
+        for resource_id in resource_ids:
+            deleted, deleted_res_ids = objstore_helper.delete_tree(
+                g.registry_colln, resource_id, current_token.user_id, current_token.group_ids)
+
+            delete_report.append({
+                "deleted": deleted,
+                "deleted_resource_ids": deleted_res_ids
+            })
+
+        return delete_report
