@@ -83,6 +83,6 @@ class VedavaapiAccounts(VedavaapiService):
         oauth_config = self.config['external_oauth_clients']
         provider_specific_config = oauth_config.get(provider_name, {})
         provider_specific_config['client_secret_file_path'] = self.registry.lookup('credentials').creds_path(
-            org_name, 'oauth', provider_name, file_name=provider_specific_config.get('file_name', None))
+            org_name, 'oauth', provider_name, client_name=provider_specific_config.get('client_name', None))
         print('psoc', provider_specific_config)
         return provider_specific_config
