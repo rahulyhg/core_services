@@ -1,5 +1,6 @@
 from flask import g
 import flask_restplus
+from sanskrit_ld.helpers.permissions_helper import PermissionResolver
 
 from sanskrit_ld.schema.base import Permission, ObjectPermissions
 from vedavaapi.objectdb import objstore_helper
@@ -25,20 +26,20 @@ class InitialAgents(flask_restplus.Resource):
         }
 
 
-@api.route('/agents/<string:agent_id>/permitted_agents')
-class PermittedAgents(flask_restplus.Resource):
+@api.route('/agents/<string:agent_id>/actor_agents')
+class ActorAgents(flask_restplus.Resource):
 
     post_parser = api.parser()
-    post_parser.add_argument('action', location='form', type=str, required=True, choices=ObjectPermissions.ACTIONS)
+    post_parser.add_argument('actions', location='form', type=str, required=True, help='any combination among {}'.format(str(ObjectPermissions.ACTIONS)))
     post_parser.add_argument(
-        'agents_set_name', location='form', type=str, required=True, choices=[Permission.GRANTED, Permission.WITHDRAWN])
+        'agents_set', location='form', type=str, required=True, choices=[Permission.GRANTED, Permission.WITHDRAWN])
     post_parser.add_argument('user_ids', location='form', type=str, default='[]')
     post_parser.add_argument('group_ids', location='form', type=str, default='[]')
 
     delete_parser = api.parser()
-    delete_parser.add_argument('action', location='form', type=str, required=True, choices=ObjectPermissions.ACTIONS)
+    delete_parser.add_argument('actions', location='form', type=str, required=True, help='any combination among {}'.format(str(ObjectPermissions.ACTIONS)))
     delete_parser.add_argument(
-        'agents_set_name', location='form', type=str, required=True, choices=[Permission.GRANTED, Permission.WITHDRAWN])
+        'agents_set', location='form', type=str, required=True, choices=[Permission.GRANTED, Permission.WITHDRAWN])
     delete_parser.add_argument('user_ids', location='form', type=str, default='[]')
     delete_parser.add_argument('group_ids', location='form', type=str, default='[]')
 
@@ -46,6 +47,9 @@ class PermittedAgents(flask_restplus.Resource):
     @require_oauth()
     def post(self, agent_id):
         args = self.post_parser.parse_args()
+
+        actions = jsonify_argument(args.get('actions'), key='actions')
+        check_argument_type(actions, (list, ), key='actions')
 
         user_ids = jsonify_argument(args.get('user_ids', None), key='user_ids') or []
         check_argument_type(user_ids, (list, ), key='user_ids')
@@ -64,7 +68,7 @@ class PermittedAgents(flask_restplus.Resource):
         try:
             objstore_helper.add_to_permissions_agent_set(
                 g.users_colln, agent_id, current_token.user_id, current_token.group_ids,
-                args['action'], args['agents_set_name'], get_user_fn, get_group_fn,
+                actions, args['agents_set'], get_user_fn, get_group_fn,
                 user_ids=user_ids, group_ids=group_ids)
         except objstore_helper.ObjModelException as e:
             return error_response(message=e.message, code=e.http_response_code)
@@ -79,6 +83,9 @@ class PermittedAgents(flask_restplus.Resource):
             return error_response(message='not authorized', code=401)
         args = self.post_parser.parse_args()
 
+        actions = jsonify_argument(args.get('actions'), key='actions')
+        check_argument_type(actions, (list, ), key='actions')
+
         user_ids = jsonify_argument(args.get('user_ids', None), key='user_ids') or []
         check_argument_type(user_ids, (list, ), key='user_ids')
 
@@ -88,7 +95,7 @@ class PermittedAgents(flask_restplus.Resource):
         try:
             objstore_helper.remove_from_permissions_agent_set(
                 g.users_colln, agent_id, current_token.user_id, current_token.group_ids,
-                args['action'], args['agents_set_name'],
+                actions, args['agents_set'],
                 user_ids=user_ids, group_ids=group_ids)
         except objstore_helper.ObjModelException as e:
             return error_response(message=e.message, code=e.http_response_code)
@@ -96,3 +103,33 @@ class PermittedAgents(flask_restplus.Resource):
         agent_json = g.users_colln.get(agent_id, projection={"permissions": 1})
         agent_permissions = agent_json['permissions']
         return agent_permissions
+
+
+@api.route('/agents/<string:agent_id>/resolved_permissions')
+class ResolvedPermissions(flask_restplus.Resource):
+
+    get_parser = api.parser()
+    get_parser.add_argument('actions', location='args', type=str, default=None)
+    get_parser.add_argument('Authorization', location='headers', type=str, required=True, help='should be in form of "Bearer <access_token>"')
+
+    @api.expect(get_parser, validate=True)
+    @require_oauth()
+    def get(self, agent_id):
+        if not current_token.user_id:
+            return error_response(message='request should be on behalf of a user', code=400)
+        args = self.get_parser.parse_args()
+
+        actions = jsonify_argument(args.get('actions', None), key='actions') or list(ObjectPermissions.ACTIONS)
+        check_argument_type(actions, (list, ), key='actions')
+
+        agent = objstore_helper.get_resource(
+            g.users_colln, agent_id, projection=None
+        )
+        if not agent:
+            return error_response(message='resource not found', code=404)
+
+        resolved_permissions = dict(
+            (action, PermissionResolver.resolve_permission(agent, action, current_token.user_id, current_token.group_ids, g.users_colln, true_if_none=False))
+            for action in actions
+        )
+        return resolved_permissions

@@ -32,6 +32,9 @@ class Groups(flask_restplus.Resource):
     post_parser.add_argument('group_json', location='form', type=str, required=True)
     post_parser.add_argument('return_projection', location='form', type=str)
 
+    delete_parser = api.parser()
+    delete_parser.add_argument('group_ids', location='form', type=str, required=True)
+
     @groups_ns.expect(get_parser, validate=True)
     @require_oauth()
     def get(self):
@@ -67,6 +70,31 @@ class Groups(flask_restplus.Resource):
 
         new_group_json = g.users_colln.get(new_group_id, projection=return_projection)
         return new_group_json
+
+    @groups_ns.expect(delete_parser, validate=True)
+    @require_oauth()
+    def delete(self):
+        args = self.delete_parser.parse_args()
+
+        group_ids = jsonify_argument(args['group_ids'])
+        check_argument_type(group_ids, (list,))
+
+        ids_validity = False not in [isinstance(_id, str) for _id in group_ids]
+        if not ids_validity:
+            return error_response(message='ids should be strings', code=404)
+
+        delete_report = []
+
+        for group_id in group_ids:
+            deleted, deleted_res_ids = objstore_helper.delete_tree(
+                g.users_colln, group_id, current_token.user_id, current_token.group_ids)
+
+            delete_report.append({
+                "deleted": deleted,
+                "deleted_resource_ids": deleted_res_ids
+            })
+
+        return delete_report
 
 
 @groups_ns.route('/<group_identifier>')
