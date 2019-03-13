@@ -72,6 +72,7 @@ class Services(flask_restplus.Resource):
             service_json['source'] = g.registry_resource_id
         if service_json['source'] != g.registry_resource_id:
             return error_response(message='invalid service', code=403)
+        print(service_json)
         service_obj = VedavaapiService.make_from_dict(service_json)
 
         return_projection = jsonify_argument(
