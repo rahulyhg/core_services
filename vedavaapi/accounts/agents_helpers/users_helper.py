@@ -4,10 +4,10 @@ import bcrypt
 from sanskrit_ld.helpers import permissions_helper
 
 from sanskrit_ld.schema import JsonObject, WrapperObject
-from sanskrit_ld.schema.base import ObjectPermissions
+from sanskrit_ld.schema.base import ObjectPermissions, Permission
 from sanskrit_ld.schema.users import User
 
-from vedavaapi.objectdb import objstore_helper
+from vedavaapi.objectdb.helpers import ObjModelException, projection_helper, objstore_helper
 
 
 def get_user_selector_doc(_id=None, email=None, external_provider=None, external_uid=None):
@@ -29,17 +29,19 @@ def get_user_selector_doc(_id=None, email=None, external_provider=None, external
 
 
 def get_user(users_colln, user_selector_doc, projection=None):
-    projection = objstore_helper.modified_projection(projection, mandatory_attrs=["jsonClass"])
+    projection = projection_helper.modified_projection(projection, mandatory_attrs=["jsonClass"])
     user_json = users_colln.find_one(user_selector_doc, projection=projection)
     return JsonObject.make_from_dict(user_json)
 
 
 def project_user_json(user_json, projection=None):
-    user_exposed_projection = objstore_helper.modified_projection(
+    user_exposed_projection = projection_helper.modified_projection(
         user_json.get('exposed_projection', None), mandatory_attrs=['_id', 'jsonClass']) or {}
-    user_exposed_projection = objstore_helper.get_restricted_projection(user_exposed_projection, {"hashedPassword": 0})
-    projected_user_json = objstore_helper.project_doc(
-        user_json, objstore_helper.get_restricted_projection(projection, user_exposed_projection))
+    user_exposed_projection = projection_helper.get_restricted_projection(
+        user_exposed_projection, {"hashedPassword": 0}
+    )
+    projected_user_json = projection_helper.project_doc(
+        user_json, projection_helper.get_restricted_projection(projection, user_exposed_projection))
     return projected_user_json
 
 
@@ -100,17 +102,17 @@ no validity checks.
 def create_new_user(users_colln, user_json, initial_agents=None, with_password=True):
     for k in ('_id', 'externalAuthentications'):
         if k in user_json:
-            raise objstore_helper.ObjModelException('you cannot set "{}" attribute.', 403)
+            raise ObjModelException('you cannot set "{}" attribute.', 403)
 
     essential_fields = ['email', 'jsonClass']
     if with_password:
         essential_fields.append('password')
     for k in essential_fields:
         if k not in user_json:
-            raise objstore_helper.ObjModelException('{} should be provided for creating new user'.format(k), 400)
+            raise ObjModelException('{} should be provided for creating new user'.format(k), 400)
 
     if user_json['jsonClass'] != 'User':
-        raise objstore_helper.ObjModelException('invalid jsonClass', 403)
+        raise ObjModelException('invalid jsonClass', 403)
 
     if with_password:
         user_json['hashedPassword'] = bcrypt.hashpw(
@@ -121,15 +123,15 @@ def create_new_user(users_colln, user_json, initial_agents=None, with_password=T
         users_colln, get_user_selector_doc(email=user_json['email']),
         projection={"_id": 1, "jsonClass": 1})
     if existing_user is not None:
-        raise objstore_helper.ObjModelException('user already exists', 403)
+        raise ObjModelException('user already exists', 403)
 
     user = JsonObject.make_from_dict(user_json)
     user.set_from_dict({"externalAuthentications": WrapperObject()})
 
     new_user_id = objstore_helper.create_resource(
-        users_colln, user, None, None, initial_agents=initial_agents, standalone=True)
-    permissions_helper.add_to_granted_list(
-        users_colln, [new_user_id], ObjectPermissions.ACTIONS, user_pids=[new_user_id])
+        users_colln, user.to_json_map(), None, None, initial_agents=initial_agents, standalone=True)
+    permissions_helper.add_to_agent_set(
+        users_colln, [new_user_id], ObjectPermissions.ACTIONS, Permission.GRANTED, user_pids=[new_user_id])
 
     from ..agents_helpers import groups_helper
     if initial_agents is not None:

@@ -7,6 +7,7 @@ import furl
 from authlib.flask.oauth2 import current_token
 from authlib.specs.rfc6749 import OAuth2Error
 from sanskrit_ld.schema.users import UsersGroup
+from vedavaapi.accounts.agents_helpers import groups_helper
 
 from vedavaapi.common.api_common import error_response, abort_with_error_response, get_current_org
 
@@ -247,8 +248,9 @@ class TokenResolver(flask_restplus.Resource):
         token_doc = token.to_json_map()
         if hasattr(token, 'user_id'):
             group_ids = [
-                group['_id'] for group in g.users_colln.find(
-                    {"jsonClass": UsersGroup.json_class, "members": token.user_id}, projection={"_id": 1})
+                group['_id'] for group in groups_helper.get_user_groups(
+                    g.users_colln, token.user_id, groups_projection={"_id": 1}
+                )
             ]
             token_doc['group_ids'] = group_ids
 

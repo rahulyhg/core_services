@@ -6,7 +6,7 @@ from jsonschema import ValidationError
 from sanskrit_ld.helpers.permissions_helper import PermissionResolver
 from sanskrit_ld.schema import JsonObject
 from sanskrit_ld.schema.base import ObjectPermissions
-from vedavaapi.objectdb import objstore_helper
+from vedavaapi.objectdb.helpers import ObjModelException, projection_helper, objstore_helper
 
 from vedavaapi.common.api_common import jsonify_argument, check_argument_type, error_response, abort_with_error_response
 from vedavaapi.common.token_helper import require_oauth, current_token
@@ -56,14 +56,14 @@ class Groups(flask_restplus.Resource):
         return_projection = jsonify_argument(args.get('return_projection', None), key='return_projection')
         check_argument_type(return_projection, (dict,), key='return_projection', allow_none=True)
         _validate_projection(return_projection)
-        return_projection = objstore_helper.modified_projection(
+        return_projection = projection_helper.modified_projection(
             return_projection, mandatory_attrs=['_id', 'jsonClass'])
 
         try:
             new_group_id = groups_helper.create_new_group(
                 g.users_colln, group_json,
                 current_token.user_id, current_token.group_ids, initial_agents=g.initial_agents)
-        except objstore_helper.ObjModelException as e:
+        except ObjModelException as e:
             return error_response(message=e.message, code=e.http_response_code)
         except ValidationError as e:
             return error_response(message='invalid schema for group_json', code=403, details={"error": str(e)})
@@ -130,7 +130,7 @@ class GroupResource(flask_restplus.Resource):
         projection = jsonify_argument(args.get('projection', None), key='projection')
         check_argument_type(projection, (dict,), key='projection', allow_none=True)
         _validate_projection(projection)
-        projection = objstore_helper.modified_projection(projection, mandatory_attrs=["_id", "jsonClass"])
+        projection = projection_helper.modified_projection(projection, mandatory_attrs=["_id", "jsonClass"])
 
         group = JsonObject.make_from_dict(g.users_colln.find_one(group_selector_doc, projection=None))
         if group is None:
@@ -141,7 +141,7 @@ class GroupResource(flask_restplus.Resource):
             return error_response(message='permission denied', code=403)
 
         group_json = group.to_json_map()
-        projected_group_json = objstore_helper.project_doc(group_json, projection)
+        projected_group_json = projection_helper.project_doc(group_json, projection)
         return projected_group_json
 
     @groups_ns.expect(post_parser, validate=True)
@@ -173,17 +173,17 @@ class GroupResource(flask_restplus.Resource):
         return_projection = jsonify_argument(args.get('return_projection', None), key='return_projection')
         check_argument_type(return_projection, (dict,), key='return_projection', allow_none=True)
         _validate_projection(return_projection)
-        return_projection = objstore_helper.modified_projection(
+        return_projection = projection_helper.modified_projection(
             return_projection, mandatory_attrs=['_id', 'jsonClass'])
 
         try:
             group_update = JsonObject.make_from_dict(update_doc)
             updated_group_id = objstore_helper.update_resource(
-                g.users_colln, group_update, current_token.user_id, current_token.group_ids,
+                g.users_colln, group_update.to_json_map(), current_token.user_id, current_token.group_ids,
                 not_allowed_attributes=['members', 'groupName'])
             if updated_group_id is None:
-                raise objstore_helper.ObjModelException('group not exist', 404)
-        except objstore_helper.ObjModelException as e:
+                raise ObjModelException('group not exist', 404)
+        except ObjModelException as e:
             return error_response(message=e.message, code=e.http_response_code)
         except ValueError as e:
             return error_response(message='schema validation error', code=403, details={"error": str(e)})
@@ -246,7 +246,7 @@ class Members(flask_restplus.Resource):
             # noinspection PyUnusedLocal
             modified_count = groups_helper.add_users_to_group(
                 g.users_colln, group_selector_doc, user_ids, current_token.user_id, current_token.group_ids)
-        except objstore_helper.ObjModelException as e:
+        except ObjModelException as e:
             return error_response(message=e.message, code=e.http_response_code)
 
         member_ids = g.users_colln.find_one(group_selector_doc, projection={"members": 1}).get('members', [])
@@ -271,7 +271,7 @@ class Members(flask_restplus.Resource):
             # noinspection PyUnusedLocal
             modified_count = groups_helper.remove_users_from_group(
                 g.users_colln, group_selector_doc, user_ids, current_token.user_id, current_token.group_ids)
-        except objstore_helper.ObjModelException as e:
+        except ObjModelException as e:
             return error_response(message=e.message, code=e.http_response_code)
 
         member_ids = g.users_colln.find_one(group_selector_doc, projection={"members": 1}).get('members', [])

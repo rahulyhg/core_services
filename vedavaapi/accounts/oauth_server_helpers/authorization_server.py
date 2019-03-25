@@ -13,7 +13,7 @@ class AuthorizationServer(_AuthorizationServer):
     def __init__(self, config, oauth_colln, users_colln, **kwargs):
         self.oauth_colln = oauth_colln
         self.users_colln = users_colln
-        WrapperApp = namedtuple('WrapperApp', ('config'))
+        WrapperApp = namedtuple('WrapperApp', ('config', ))
         app = WrapperApp(config)
         query_client = create_query_client_func(self.oauth_colln)
         save_token = create_save_token_func(self.oauth_colln)

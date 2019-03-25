@@ -4,7 +4,7 @@ import bcrypt
 
 from sanskrit_ld.schema import JsonObject
 from sanskrit_ld.schema.oauth import OAuth2MasterConfig, OAuth2Client
-from vedavaapi.objectdb import objstore_helper
+from vedavaapi.objectdb.helpers import ObjModelException, projection_helper, objstore_helper
 
 
 def get_client_selector_doc(_id=None, client_id=None):
@@ -20,17 +20,16 @@ def get_client_selector_doc(_id=None, client_id=None):
     return selector_doc
 
 
-
 def get_client(oauth_colln, client_selector_doc, projection=None):
-    projection = objstore_helper.modified_projection(projection, mandatory_attrs=["jsonClass"])
+    projection = projection_helper.modified_projection(projection, mandatory_attrs=["jsonClass"])
     user_json = oauth_colln.find_one(client_selector_doc, projection=projection)
     return JsonObject.make_from_dict(user_json)
 
 
 def project_client_json(client_json, projection=None):
-    client_exposed_projection = objstore_helper.get_restricted_projection(projection, {"client_secret": 0})
-    projected_client_json = objstore_helper.project_doc(
-        client_json, objstore_helper.get_restricted_projection(projection, client_exposed_projection))
+    client_exposed_projection = projection_helper.get_restricted_projection(projection, {"client_secret": 0})
+    projected_client_json = projection_helper.project_doc(
+        client_json, projection_helper.get_restricted_projection(projection, client_exposed_projection))
     return projected_client_json
 
 
@@ -43,30 +42,39 @@ def get_client_underscore_id(oauth_colln, client_id):
 """
 """
 
+
 def create_new_client(oauth_colln, client_json, client_type, user_id, group_ids, initial_agents=None):
     oauth2_master_config = oauth_colln.find_one({"jsonClass": OAuth2MasterConfig.json_class})
     if oauth2_master_config:
         grant_privileges_conf = oauth2_master_config['grant_privileges']
 
         cc_agent_set = grant_privileges_conf['client_credentials']
-        allow_cc_grant = user_id in cc_agent_set['users'] or True in [group in cc_agent_set['groups'] for group in group_ids]
+        allow_cc_grant = (
+                user_id in cc_agent_set['users']
+                or True in [group in cc_agent_set['groups'] for group in group_ids]
+        )
 
         pw_agent_set = grant_privileges_conf['password']
-        allow_pw_grant = user_id in pw_agent_set['users'] or True in [group in pw_agent_set['groups'] for group in group_ids]
+        allow_pw_grant = (
+                user_id in pw_agent_set['users']
+                or True in [group in pw_agent_set['groups'] for group in group_ids]
+        )
     else:
         allow_cc_grant = allow_pw_grant = False
 
-    for k in ('_id', 'client_id', 'client_secret', 'token_endpoint_auth_method', 'grant_types', 'response_types', 'scope', 'user_id'):
+    for k in (
+            '_id', 'client_id', 'client_secret', 'token_endpoint_auth_method',
+            'grant_types', 'response_types', 'scope', 'user_id'):
         if k in client_json:
-            raise objstore_helper.ObjModelException('you can\'t set {} attribute'.format(k), 403)
+            raise ObjModelException('you can\'t set {} attribute'.format(k), 403)
 
     if client_json['jsonClass'] != OAuth2Client.json_class:
-        raise objstore_helper.ObjModelException('invalid jsonClass', 403)
+        raise ObjModelException('invalid jsonClass', 403)
 
     essential_fields = ['name']
     for k in essential_fields:
         if k not in client_json:
-            raise objstore_helper.ObjModelException('unsufficient data', 403)
+            raise ObjModelException('unsufficient data', 403)
 
     client_id = uuid.uuid4().hex
     grant_types = ['authorization_code', 'refresh_token', 'implicit'] if client_type == 'private' else ['implicit']
@@ -89,5 +97,6 @@ def create_new_client(oauth_colln, client_json, client_type, user_id, group_ids,
 
     client = JsonObject.make_from_dict(client_json)
 
-    new_client_underscore_id = objstore_helper.create_resource(oauth_colln, client, user_id, group_ids, initial_agents=initial_agents, standalone=True)
+    new_client_underscore_id = objstore_helper.create_resource(
+        oauth_colln, client.to_json_map(), user_id, group_ids, initial_agents=initial_agents, standalone=True)
     return new_client_underscore_id

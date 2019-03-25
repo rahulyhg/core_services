@@ -1,7 +1,7 @@
 from collections import namedtuple
 
 from sanskrit_ld.schema import WrapperObject
-from sanskrit_ld.schema.base import ObjectPermissions, AgentSet
+from sanskrit_ld.schema.base import ObjectPermissions, AgentSet, Permission
 from sanskrit_ld.helpers import permissions_helper
 from sanskrit_ld.schema.oauth import OAuth2MasterConfig
 from sanskrit_ld.schema.users import User, UsersGroup
@@ -22,8 +22,8 @@ def bootstrap_initial_agents(users_colln, oauth_colln, initial_agents_config):
     all_users_conf = initial_agents_config['groups']['all_users']
     all_users_group_id = create_all_users_group(users_colln, all_users_conf['group_name'], root_admin_id)
 
-    permissions_helper.add_to_granted_list(
-        users_colln, [root_admin_id], [ObjectPermissions.READ], group_pids=[all_users_group_id])
+    permissions_helper.add_to_agent_set(
+        users_colln, [root_admin_id], [ObjectPermissions.READ], Permission.GRANTED, group_pids=[all_users_group_id])
 
     root_admins_conf = initial_agents_config['groups']['root_admins']
     root_admins_group_id = create_root_admins_group(
@@ -47,8 +47,9 @@ def create_root_admin(users_colln, email, hashed_password):
     user = User()
     user.set_details(email=email, hashed_password=hashed_password)
     root_admin_id = users_helper.create_new_user(users_colln, user.to_json_map(), with_password=False)
-    permissions_helper.add_to_granted_list(
-        users_colln, [root_admin_id], ObjectPermissions.ACTIONS, user_pids=[root_admin_id], group_pids=[])
+    permissions_helper.add_to_agent_set(
+        users_colln, [root_admin_id], ObjectPermissions.ACTIONS, Permission.GRANTED,
+        user_pids=[root_admin_id], group_pids=[])
     return root_admin_id
 
 
@@ -65,11 +66,12 @@ def create_all_users_group(users_colln, group_name, creator_id):
     all_users_group_id = groups_helper.create_new_group(
         users_colln, all_users_group.to_json_map(), creator_id, [], ignore_source=True)
 
-    permissions_helper.add_to_granted_list(
-        users_colln, [all_users_group_id], [ObjectPermissions.UPDATE_CONTENT], user_pids=[creator_id])
-    permissions_helper.add_to_granted_list(
+    permissions_helper.add_to_agent_set(
+        users_colln, [all_users_group_id], [ObjectPermissions.UPDATE_CONTENT], Permission.GRANTED,
+        user_pids=[creator_id])
+    permissions_helper.add_to_agent_set(
         users_colln, [all_users_group_id],
-        [ObjectPermissions.READ, ObjectPermissions.LINK_FROM_OTHERS],
+        [ObjectPermissions.READ, ObjectPermissions.CREATE_CHILDREN], Permission.GRANTED,
         user_pids=[creator_id], group_pids=[all_users_group_id])
     return all_users_group_id
 
@@ -88,8 +90,8 @@ def create_root_admins_group(users_colln, group_name, creator_id, parent_group_i
     root_admins_group_id = groups_helper.create_new_group(
         users_colln, root_admins_group.to_json_map(), creator_id, [])
 
-    permissions_helper.add_to_granted_list(
-        users_colln, [root_admins_group_id], ObjectPermissions.ACTIONS, user_pids=[creator_id])
+    permissions_helper.add_to_agent_set(
+        users_colln, [root_admins_group_id], ObjectPermissions.ACTIONS, Permission.GRANTED, user_pids=[creator_id])
     return root_admins_group_id
 
 
@@ -112,7 +114,9 @@ def bootstrap_oauth2_master_config(oauth_colln, root_admin_id, root_admins_group
     })
 
     permissions = ObjectPermissions.template_object_permissions()
-    permissions.add_to_granted_list([ObjectPermissions.READ, ObjectPermissions.UPDATE_CONTENT], group_pids=[root_admins_group_id])
+    permissions.add_to_agent_set(
+        [ObjectPermissions.READ, ObjectPermissions.UPDATE_CONTENT],
+        Permission.GRANTED, group_pids=[root_admins_group_id])
 
     oauth2_master_config.set_from_dict({
         "permissions": permissions,

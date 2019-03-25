@@ -4,7 +4,7 @@ from flask import g
 from jsonschema import ValidationError
 from sanskrit_ld.schema.services import VedavaapiService
 
-from vedavaapi.objectdb import objstore_helper
+from vedavaapi.objectdb.helpers import ObjModelException, projection_helper, objstore_helper
 from vedavaapi.common.api_common import jsonify_argument, check_argument_type, error_response, get_initial_agents
 from vedavaapi.common.token_helper import require_oauth, current_token
 
@@ -35,8 +35,8 @@ class Services(flask_restplus.Resource):
 
         projection = jsonify_argument(args.get('projection', None), key='projection') or {"permissions": 0}
         try:
-            objstore_helper.validate_projection(projection)
-        except objstore_helper.ObjModelException as e:
+            projection_helper.validate_projection(projection)
+        except ObjModelException as e:
             return error_response(message=e.message, code=e.http_response_code)
 
         selector_doc = filter_doc.copy()
@@ -44,7 +44,7 @@ class Services(flask_restplus.Resource):
         try:
             service_jsons = objstore_helper.get_read_permitted_resource_jsons(
                 g.registry_colln, current_token.user_id, current_token.group_ids, selector_doc)
-        except objstore_helper.ObjModelException as e:
+        except ObjModelException as e:
             return error_response(message=e.message, code=e.http_response_code)
 
         services_map = {}
@@ -53,7 +53,7 @@ class Services(flask_restplus.Resource):
             if service_name not in services_map:
                 services_map[service_name] = []
 
-            projected_service_json = objstore_helper.project_doc(service_json, projection)
+            projected_service_json = projection_helper.project_doc(service_json, projection)
             services_map[service_name].append(projected_service_json)
 
         return services_map
@@ -72,21 +72,19 @@ class Services(flask_restplus.Resource):
             service_json['source'] = g.registry_resource_id
         if service_json['source'] != g.registry_resource_id:
             return error_response(message='invalid service', code=403)
-        print(service_json)
-        service_obj = VedavaapiService.make_from_dict(service_json)
 
         return_projection = jsonify_argument(
             args.get('return_projection', None), key='return_projection') or {"permissions": 0}
         try:
-            objstore_helper.validate_projection(return_projection)
-        except objstore_helper.ObjModelException as e:
+            projection_helper.validate_projection(return_projection)
+        except ObjModelException as e:
             return error_response(message=e.message, code=e.http_response_code)
 
         try:
             service_id = objstore_helper.create_or_update(
-                g.registry_colln, service_obj, current_token.user_id, current_token.group_ids,
+                g.registry_colln, service_json, current_token.user_id, current_token.group_ids,
                 initial_agents=get_initial_agents(), non_updatable_attributes=['service_name'])
-        except objstore_helper.ObjModelException as e:
+        except ObjModelException as e:
             return error_response(message=e.message, code=e.http_response_code)
         except ValidationError as e:
             return error_response(message='schema validation error', code=400, details={"error": str(e)})

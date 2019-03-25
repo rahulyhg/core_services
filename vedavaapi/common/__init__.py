@@ -152,6 +152,7 @@ class VedavaapiService(object):
         try:
             api_mod = __import__(api_modname, globals(), locals(), ["*"])
         except ModuleNotFoundError as mnfe:
+            print(mnfe)
             return None
 
         import flask  # just to check if an obj is flask.Blueprint obj or not. independent of context

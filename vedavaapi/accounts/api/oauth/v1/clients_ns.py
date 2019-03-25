@@ -4,7 +4,7 @@ from jsonschema import ValidationError
 
 from vedavaapi.accounts.agents_helpers import groups_helper
 from vedavaapi.common.api_common import error_response, jsonify_argument, check_argument_type
-from vedavaapi.objectdb import objstore_helper
+from vedavaapi.objectdb.helpers import ObjModelException, projection_helper
 
 from . import api
 from ....oauth_server_helpers import clients_helper
@@ -30,12 +30,16 @@ class Clients(flask_restplus.Resource):
 
     get_parser = clients_ns.parser()
     get_parser.add_argument('projection', type=str, location='args')
-    get_parser.add_argument('marshal_to_google_structure', type=str, location='args', default='false', choices=['true', 'false'])
+    get_parser.add_argument(
+        'marshal_to_google_structure', type=str, location='args', default='false', choices=['true', 'false']
+    )
 
     post_parser = clients_ns.parser()
     post_parser.add_argument('client_json', type=str, location='form', required=True)
     post_parser.add_argument('client_type', type=str, location='form', required=True, choices=['public', 'private'])
-    post_parser.add_argument('marshal_to_google_structure', type=str, location='form', default='false', choices=['true', 'false'])
+    post_parser.add_argument(
+        'marshal_to_google_structure', type=str, location='form', default='false', choices=['true', 'false']
+    )
 
     @clients_ns.expect(get_parser, validate=True)
     def get(self):
@@ -45,8 +49,8 @@ class Clients(flask_restplus.Resource):
         args = self.get_parser.parse_args()
         projection = jsonify_argument(args.get('projection', None), key='projection')
         try:
-            objstore_helper.validate_projection(projection)
-        except objstore_helper.ObjModelException as e:
+            projection_helper.validate_projection(projection)
+        except ObjModelException as e:
             return error_response(message=e.message, code=e.http_response_code)
 
         clients_selector_doc = {
@@ -63,7 +67,10 @@ class Clients(flask_restplus.Resource):
     def post(self):
         if g.current_user_id is None:
             return error_response(message='not authorized', code=401)
-        current_user_group_ids = groups_helper.get_user_group_ids(g.users_colln, g.current_user_id)
+        current_user_group_ids = [
+            group['_id'] for group in groups_helper.get_user_groups(
+                g.users_colln, g.current_user_id, groups_projection={"_id": 1})
+        ]
 
         args = self.post_parser.parse_args()
 
@@ -75,7 +82,7 @@ class Clients(flask_restplus.Resource):
         try:
             new_client_id = clients_helper.create_new_client(
                 g.oauth_colln, client_json, client_type, g.current_user_id, current_user_group_ids, initial_agents=None)
-        except objstore_helper.ObjModelException as e:
+        except ObjModelException as e:
             return error_response(message=e.message, code=e.http_response_code)
         except ValidationError as e:
             return error_response(message='invalid schema for client_json', code=403, details={"error": str(e)})
