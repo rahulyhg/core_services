@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Vedavaapi Accounts Sign in</title>
+    <link rel="stylesheet" id="theme" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container">
+
+        <div class="row">
+            <div class="col-sm-6 col-md-3">
+                <img src="https://apps.vedavaapi.org/client/assets/app_logo.png" class="img-responsive" />
+            </div>
+            <div class="col-sm-3 col-md-4"></div>
+        </div>
+        <hr>
+
+        <div class="row" id="form-row">
+            <div class="col-md-3 col-lg-3"></div>
+            <div class="col-md-6 col-lg-5" id="form-div">
+                <form  method="post" id="login-form">
+                    <div>
+                        <label for="username_input">User id:</label><br>
+                        <input type="email" id ="username_input" name="email" required>
+                    </div>
+                    <div>
+                        <label for="password_input">Password:</label><br>
+                        <input type="password" id ="password_input" name="password" required>
+                    </div>
+                    <div>
+                      <button type="button" id="submit-button-login">login</button>
+                    </div>
+                </form>
+
+                <div id="social-login-div">
+                    <label for="google_button">Through google:</label>
+                    <button id="google_button">google</button>
+                </div>
+
+                <div id="login-success-status"></div>
+            </div>
+            <div class="col-md-3 col-lg-3"></div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,14 +1,11 @@
 # -*-encoding:utf-8-*-
-"""
-Some common utilities.
-"""
 
 import json
 import logging
 import os
 import re
 
-from .store_helper import StoreHelper
+from vedavaapi.common.helpers.store_helper import StoreHelper
 
 
 logging.basicConfig(

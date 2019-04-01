@@ -5,8 +5,8 @@ from sanskrit_ld.helpers.permissions_helper import PermissionResolver
 from sanskrit_ld.schema.base import Permission, ObjectPermissions
 from vedavaapi.objectdb.helpers import ObjModelException, objstore_helper
 
-from vedavaapi.common.api_common import error_response, jsonify_argument, check_argument_type
-from vedavaapi.common.token_helper import require_oauth, current_token
+from vedavaapi.common.helpers.api_helper import error_response, jsonify_argument, check_argument_type
+from vedavaapi.common.helpers.token_helper import require_oauth, current_token
 
 from . import api
 from ....agents_helpers import users_helper, groups_helper

@@ -1,4 +1,4 @@
-from .api_common import jsonify_argument, check_argument_type
+from .api_helper import jsonify_argument, check_argument_type
 
 
 def parse_json_args(args, parse_directives):

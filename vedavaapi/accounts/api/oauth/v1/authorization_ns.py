@@ -6,10 +6,9 @@ import flask_restplus
 import furl
 from authlib.flask.oauth2 import current_token
 from authlib.specs.rfc6749 import OAuth2Error
-from sanskrit_ld.schema.users import UsersGroup
 from vedavaapi.accounts.agents_helpers import groups_helper
 
-from vedavaapi.common.api_common import error_response, abort_with_error_response, get_current_org
+from vedavaapi.common.helpers.api_helper import error_response, abort_with_error_response, get_current_org
 
 from . import api
 from ... import sign_out_user, myservice, require_oauth

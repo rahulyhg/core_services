@@ -7,7 +7,7 @@ from flask import request, g, _app_ctx_stack
 from requests import HTTPError
 from werkzeug.local import LocalProxy
 
-from .api_common import error_response, abort_with_error_response
+from .api_helper import error_response, abort_with_error_response
 
 
 class TokenInfo(object):

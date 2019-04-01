@@ -2,7 +2,7 @@ import requests
 from flask import request
 from flask_restplus import Resource, Namespace, reqparse
 
-from vedavaapi.common.api_common import error_response, get_current_org
+from vedavaapi.common.helpers.api_helper import error_response, get_current_org
 
 from .. import creds_dict, myservice
 

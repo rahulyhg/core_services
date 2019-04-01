@@ -1,7 +1,7 @@
 import os
 
 from flask import g
-from vedavaapi.common.api_common import get_current_org
+from vedavaapi.common.helpers.api_helper import get_current_org
 
 from . import myservice
 

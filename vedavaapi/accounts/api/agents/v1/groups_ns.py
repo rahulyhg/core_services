@@ -8,8 +8,8 @@ from sanskrit_ld.schema import JsonObject
 from sanskrit_ld.schema.base import ObjectPermissions
 from vedavaapi.objectdb.helpers import ObjModelException, projection_helper, objstore_helper
 
-from vedavaapi.common.api_common import jsonify_argument, check_argument_type, error_response, abort_with_error_response
-from vedavaapi.common.token_helper import require_oauth, current_token
+from vedavaapi.common.helpers.api_helper import jsonify_argument, check_argument_type, error_response, abort_with_error_response
+from vedavaapi.common.helpers.token_helper import require_oauth, current_token
 
 from . import api
 from .users_ns import get_requested_agents, _validate_projection

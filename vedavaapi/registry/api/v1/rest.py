@@ -5,8 +5,8 @@ from jsonschema import ValidationError
 from sanskrit_ld.schema.services import VedavaapiService
 
 from vedavaapi.objectdb.helpers import ObjModelException, projection_helper, objstore_helper
-from vedavaapi.common.api_common import jsonify_argument, check_argument_type, error_response, get_initial_agents
-from vedavaapi.common.token_helper import require_oauth, current_token
+from vedavaapi.common.helpers.api_helper import jsonify_argument, check_argument_type, error_response, get_initial_agents
+from vedavaapi.common.helpers.token_helper import require_oauth, current_token
 
 from . import api
 

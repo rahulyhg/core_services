@@ -1,8 +1,8 @@
 import functools
 import os
 
-from flask import session, request, g
-from vedavaapi.common.api_common import get_current_org
+from flask import session, g
+from vedavaapi.common.helpers.api_helper import get_current_org
 from vedavaapi.objectdb.mydb import MyDbCollection
 
 from . import myservice

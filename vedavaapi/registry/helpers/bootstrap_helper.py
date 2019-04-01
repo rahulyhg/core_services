@@ -1,7 +1,7 @@
-from sanskrit_ld.schema.services import VedavaapiService, VedavaapiServicesRegistry
+from sanskrit_ld.schema.services import VedavaapiServicesRegistry
 from sanskrit_ld.schema.base import ObjectPermissions
 
-from vedavaapi.common.api_common import get_initial_agents
+from vedavaapi.common.helpers.api_helper import get_initial_agents
 
 
 def bootstrap_registry(colln, org_name):

@@ -2,7 +2,7 @@ import functools
 
 from authlib.specs.rfc6749 import MissingAuthorizationError, OAuth2Error
 from flask import session
-from vedavaapi.common.api_common import get_current_org
+from vedavaapi.common.helpers.api_helper import get_current_org
 
 from .. import VedavaapiAccounts
 
